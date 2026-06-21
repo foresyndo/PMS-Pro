@@ -201,3 +201,13 @@ export interface Lead {
   agentName: string;
   createdAt: string;
 }
+
+export interface WorkChatMessage {
+  id: string;
+  senderName: string;
+  senderRole: UserRole;
+  channel: string;
+  message: string;
+  createdAt: string;
+}
+

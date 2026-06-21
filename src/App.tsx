@@ -19,7 +19,8 @@ import {
   Menu,
   X,
   Clock,
-  Briefcase
+  Briefcase,
+  MessageSquare
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -31,10 +32,21 @@ import {
   INITIAL_CONTRACTS,
   INITIAL_INVOICES,
   INITIAL_EXPENSES,
-  INITIAL_MAINTENANCE
+  INITIAL_MAINTENANCE,
+  INITIAL_CHAT_MESSAGES
 } from "./data";
 
-import { Property, Unit, Tenant, Reservation, Contract, Invoice, Expense, MaintenanceTicket, UserRole, PaymentLog } from "./types";
+import { Property, Unit, Tenant, Reservation, Contract, Invoice, Expense, MaintenanceTicket, UserRole, PaymentLog, WorkChatMessage } from "./types";
+
+import SupabaseModule from "./components/SupabaseModule";
+import {
+  isSupabaseConfigured,
+  loadAllFromSupabase,
+  upsertToSupabase,
+  deleteFromSupabase,
+  pushAllToSupabase
+} from "./lib/supabase";
+import { Database } from "lucide-react";
 
 // Import modules
 import Dashboard from "./components/Dashboard";
@@ -47,6 +59,7 @@ import MaintenanceModule from "./components/MaintenanceModule";
 import HousekeepingInventory from "./components/HousekeepingInventory";
 import CrmMarketing from "./components/CrmMarketing";
 import DigitalContract from "./components/DigitalContract";
+import WorkChatModule from "./components/WorkChatModule";
 
 export default function App() {
   // Session states
@@ -60,6 +73,112 @@ export default function App() {
   const [properties, setProperties] = useState<Property[]>(INITIAL_PROPERTIES);
   const [units, setUnits] = useState<Unit[]>(INITIAL_UNITS);
   const [tenants, setTenants] = useState<Tenant[]>(INITIAL_TENANTS);
+
+  // Chat state with LocalStorage backup
+  const [chatMessages, setChatMessages] = useState<WorkChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem("pms_chat_messages");
+      return saved ? JSON.parse(saved) : INITIAL_CHAT_MESSAGES;
+    } catch (e) {
+      return INITIAL_CHAT_MESSAGES;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("pms_chat_messages", JSON.stringify(chatMessages));
+  }, [chatMessages]);
+
+  const handleAddChatMessage = (msg: WorkChatMessage) => {
+    setChatMessages((prev) => [...prev, msg]);
+    saveToCloud("work_chats", msg);
+  };
+
+  const handleClearChats = () => {
+    setChatMessages(INITIAL_CHAT_MESSAGES);
+    registerLog("Reset database percakapan chat ke default", "Sistem");
+  };
+
+  // Supabase Integration & Load State
+  const [supabaseLoading, setSupabaseLoading] = useState(false);
+  const [supabaseStatus, setSupabaseStatus] = useState<Record<string, boolean>>({});
+
+  const saveToCloud = async (tableName: string, data: any) => {
+    if (isSupabaseConfigured()) {
+      await upsertToSupabase(tableName, data);
+    }
+  };
+
+  const removeFromCloud = async (tableName: string, id: string) => {
+    if (isSupabaseConfigured()) {
+      await deleteFromSupabase(tableName, id);
+    }
+  };
+
+  const loadDataFromSupabase = async () => {
+    if (!isSupabaseConfigured()) return;
+    setSupabaseLoading(true);
+    try {
+      const results = await loadAllFromSupabase();
+      setSupabaseStatus(results.tablesStatus);
+      const activeTablesCount = Object.values(results.tablesStatus).filter(Boolean).length;
+      
+      if (activeTablesCount > 0) {
+        if (results.tablesStatus["properties"] && results.properties.length > 0) setProperties(results.properties);
+        if (results.tablesStatus["units"] && results.units.length > 0) setUnits(results.units);
+        if (results.tablesStatus["tenants"] && results.tenants.length > 0) setTenants(results.tenants);
+        if (results.tablesStatus["reservations"] && results.reservations.length > 0) setReservations(results.reservations);
+        if (results.tablesStatus["contracts"] && results.contracts.length > 0) setContracts(results.contracts);
+        if (results.tablesStatus["invoices"] && results.invoices.length > 0) setInvoices(results.invoices);
+        if (results.tablesStatus["expenses"] && results.expenses.length > 0) setExpenses(results.expenses);
+        if (results.tablesStatus["maintenance_tickets"] && results.maintenanceTickets.length > 0) setMaintenance(results.maintenanceTickets);
+        if (results.tablesStatus["work_chats"] && results.workChats && results.workChats.length > 0) {
+          setChatMessages(results.workChats);
+        }
+        
+        registerLog("Data PMS ter-sinkronisasi langsung dengan Supabase Cloud!", "Sistem");
+      }
+    } catch (err: any) {
+      console.error("Load failed:", err);
+      registerLog(`Gagal memuat awan database: ${err.message || err}`, "Sistem");
+    } finally {
+      setSupabaseLoading(false);
+    }
+  };
+
+  const handlePushDataToSupabase = async () => {
+    if (!isSupabaseConfigured()) return;
+    setSupabaseLoading(true);
+    try {
+      const res = await pushAllToSupabase({
+        properties,
+        units,
+        tenants,
+        reservations,
+        contracts,
+        invoices,
+        expenses,
+        maintenanceTickets: maintenance,
+        paymentLogs: [],
+        workChats: chatMessages
+      });
+      if (res.success) {
+        registerLog("Berhasil seeding database lokal ke Supabase Cloud", "Sistem");
+        loadDataFromSupabase();
+      } else {
+        registerLog("Gagal push data. Periksa skema tabel di SQL editor.", "Sistem");
+      }
+    } catch (err: any) {
+      registerLog(`Unggahan Supabase mengalami error: ${err.message || err}`, "Sistem");
+    } finally {
+      setSupabaseLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      loadDataFromSupabase();
+    }
+  }, []);
 
   // States for handling deep linked simulated QR scans
   const [prefilledUnitId, setPrefilledUnitId] = useState<string | null>(null);
@@ -116,58 +235,105 @@ export default function App() {
     setActivities([freshLog, ...activities.slice(0, 15)]);
   };
 
-  // State mutators (passed to subcomponents for CRUD behavior)
+  // State mutators (passed to subcomponents for CRUD behavior with automatic Supabase sync)
   const handleAddProperty = (prop: Property) => {
     setProperties([prop, ...properties]);
     registerLog(`Menambahkan aset baru: "${prop.name}"`, "Sistem");
+    saveToCloud("properties", prop);
   };
 
   const handleUpdateProperty = (prop: Property) => {
     setProperties(properties.map(p => p.id === prop.id ? prop : p));
     registerLog(`Memperbarui info properti "${prop.name}"`, "Sistem");
+    saveToCloud("properties", prop);
   };
 
   const handleDeleteProperty = (id: string) => {
     setProperties(properties.filter(p => p.id !== id));
     registerLog(`Menghapus properti ID: ${id}`, "Sistem");
+    removeFromCloud("properties", id);
   };
 
   const handleAddUnit = (unit: Unit) => {
     setUnits([unit, ...units]);
     registerLog(`Mendaftarkan kamar baru No: ${unit.unitNumber}`, "Kamar");
+    saveToCloud("units", unit);
   };
 
   const handleUpdateUnit = (unit: Unit) => {
     setUnits(units.map(u => u.id === unit.id ? unit : u));
     registerLog(`Merubah spesifikasi kamar No: ${unit.unitNumber}`, "Kamar");
+    saveToCloud("units", unit);
   };
 
   const handleUpdateUnitStatus = (id: string, state: any) => {
-    setUnits(units.map(u => u.id === id ? { ...u, status: state } : u));
+    const updatedUnits = units.map(u => {
+      if (u.id === id) {
+        const up = { ...u, status: state };
+        saveToCloud("units", up);
+        return up;
+      }
+      return u;
+    });
+    setUnits(updatedUnits);
     registerLog(`Merubah status unit kamar ke: ${state}`, "Kamar");
   };
 
   const handleDeleteUnit = (id: string) => {
     setUnits(units.filter(u => u.id !== id));
     registerLog(`Menghapus kamar ID: ${id}`, "Kamar");
+    removeFromCloud("units", id);
   };
 
   const handleAddReservation = (res: Reservation) => {
     setReservations([res, ...reservations]);
+    saveToCloud("reservations", res);
+    
     // Auto update target unit status to Reserved
-    setUnits(units.map(u => u.id === res.unitId ? { ...u, status: "Reserved" } : u));
+    const updatedUnits = units.map(u => {
+      if (u.id === res.unitId) {
+        const up = { ...u, status: "Reserved" as const };
+        saveToCloud("units", up);
+        return up;
+      }
+      return u;
+    });
+    setUnits(updatedUnits);
     registerLog(`Membuat pemesanan baru untuk tenant ID: ${res.tenantId}`, "Booking");
   };
 
   const handleUpdateReservation = (res: Reservation) => {
     setReservations(reservations.map(r => r.id === res.id ? res : r));
+    saveToCloud("reservations", res);
+    
     // Support auto statuses alignment if Checked In
     if (res.status === "Checked In") {
-      setUnits(units.map(u => u.id === res.unitId ? { ...u, status: "Occupied" } : u));
+      setUnits(units.map(u => {
+        if (u.id === res.unitId) {
+          const up = { ...u, status: "Occupied" as const };
+          saveToCloud("units", up);
+          return up;
+        }
+        return u;
+      }));
     } else if (res.status === "Checked Out") {
-      setUnits(units.map(u => u.id === res.unitId ? { ...u, status: "Cleaning" } : u));
+      setUnits(units.map(u => {
+        if (u.id === res.unitId) {
+          const up = { ...u, status: "Cleaning" as const };
+          saveToCloud("units", up);
+          return up;
+        }
+        return u;
+      }));
     } else if (res.status === "Cancelled") {
-      setUnits(units.map(u => u.id === res.unitId ? { ...u, status: "Available" } : u));
+      setUnits(units.map(u => {
+        if (u.id === res.unitId) {
+          const up = { ...u, status: "Available" as const };
+          saveToCloud("units", up);
+          return up;
+        }
+        return u;
+      }));
     }
     registerLog(`Merubah status booking reservasi ke: ${res.status}`, "Booking");
   };
@@ -175,43 +341,76 @@ export default function App() {
   const handleAddTenant = (ten: Tenant) => {
     setTenants([ten, ...tenants]);
     registerLog(`Registrasi tenant baru: "${ten.name}"`, "Sistem");
+    saveToCloud("tenants", ten);
   };
 
   const handleDeleteTenant = (id: string) => {
     setTenants(tenants.filter(t => t.id !== id));
     registerLog(`Menghapus directory tenant ID: ${id}`, "Sistem");
+    removeFromCloud("tenants", id);
   };
 
   const handleAddInvoice = (inv: Invoice) => {
     setInvoices([inv, ...invoices]);
     registerLog(`Menerbitkan tagihan ${inv.invoiceNumber} senilai Rp ${inv.totalAmount.toLocaleString()}`, "Keuangan");
+    saveToCloud("invoices", inv);
   };
 
   const handleUpdateInvoiceStatus = (id: string, status: any) => {
-    setInvoices(invoices.map(i => i.id === id ? { ...i, status } : i));
+    const updatedInvs = invoices.map(i => {
+      if (i.id === id) {
+        const up = { ...i, status };
+        saveToCloud("invoices", up);
+        return up;
+      }
+      return i;
+    });
+    setInvoices(updatedInvs);
     registerLog(`Pembayaran tagihan invoice lunas dikonfirmasi`, "Keuangan");
   };
 
   const handleAddPayment = (pay: PaymentLog) => {
     registerLog(`Penerimaan pembayaran dari transaksi ref: ${pay.transactionNumber}`, "Keuangan");
+    saveToCloud("payment_logs", pay);
   };
 
   const handleAddExpense = (exp: Expense) => {
     setExpenses([exp, ...expenses]);
     registerLog(`Pencatatan opex pengeluaran Baru: Rp ${exp.amount.toLocaleString()}`, "Keuangan");
+    saveToCloud("expenses", exp);
   };
 
   const handleAddTicket = (tick: MaintenanceTicket) => {
     setMaintenance([tick, ...maintenance]);
+    saveToCloud("maintenance_tickets", tick);
+    
     // Set Room status to Maintenance
-    setUnits(units.map(u => u.id === tick.unitId ? { ...u, status: "Maintenance" } : u));
+    const updatedUnits = units.map(u => {
+      if (u.id === tick.unitId) {
+        const up = { ...u, status: "Maintenance" as const };
+        saveToCloud("units", up);
+        return up;
+      }
+      return u;
+    });
+    setUnits(updatedUnits);
     registerLog(`Komplain fasilitas rusak tercatat di kamar unit`, "Maintenance");
   };
 
   const handleUpdateTicket = (tick: MaintenanceTicket) => {
     setMaintenance(maintenance.map(m => m.id === tick.id ? tick : m));
+    saveToCloud("maintenance_tickets", tick);
+    
     if (tick.status === "Completed") {
-      setUnits(units.map(u => u.id === tick.unitId ? { ...u, status: "Available" } : u));
+      const updatedUnits = units.map(u => {
+        if (u.id === tick.unitId) {
+          const up = { ...u, status: "Available" as const };
+          saveToCloud("units", up);
+          return up;
+        }
+        return u;
+      });
+      setUnits(updatedUnits);
     }
     registerLog(`Status perbaikan fasilitas di-update ke: ${tick.status}`, "Maintenance");
   };
@@ -219,10 +418,12 @@ export default function App() {
   const handleAddContract = (con: Contract) => {
     setContracts([con, ...contracts]);
     registerLog(`Kontrak sewa digital diterbitkan`, "Sistem");
+    saveToCloud("contracts", con);
   };
 
   // Multi-role access control check helper
   const isTabAvailable = (tab: string) => {
+    if (tab === "workchat") return true;
     if (activeRole === "Super Admin" || activeRole === "Owner") return true;
 
     switch (activeRole) {
@@ -246,6 +447,8 @@ export default function App() {
   // Nav items specifications
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "supabase", label: "Supabase Cloud", icon: Database },
+    { id: "workchat", label: "Chat Kerja", icon: MessageSquare },
     { id: "properti", label: "Properti", icon: Building },
     { id: "kamar", label: "Kamar & Unit", icon: Home },
     { id: "booking", label: "Reservasi & Booking", icon: CalendarDays },
@@ -485,6 +688,25 @@ export default function App() {
                     invoices={invoices}
                     expenses={expenses}
                     maintenance={maintenance}
+                  />
+                )}
+
+                {activeTab === "supabase" && isTabAvailable("supabase") && (
+                  <SupabaseModule
+                    supabaseLoading={supabaseLoading}
+                    supabaseStatus={supabaseStatus}
+                    onPullData={loadDataFromSupabase}
+                    onPushData={handlePushDataToSupabase}
+                  />
+                )}
+
+                {activeTab === "workchat" && isTabAvailable("workchat") && (
+                  <WorkChatModule
+                    activeRole={activeRole}
+                    chatMessages={chatMessages}
+                    onAddChatMessage={handleAddChatMessage}
+                    onClearChats={handleClearChats}
+                    supabaseLoading={supabaseLoading}
                   />
                 )}
 

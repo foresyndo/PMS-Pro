@@ -650,3 +650,55 @@ export const INITIAL_LEADS: Lead[] = [
     createdAt: "2026-06-18T11:20:00Z"
   }
 ];
+
+export const INITIAL_CHAT_MESSAGES = [
+  {
+    id: "chat-1",
+    senderName: "Budi Santoso",
+    senderRole: "Owner",
+    channel: "#umum",
+    message: "Selamat pagi semua. Kanal chat kerja real-time sekarang sudah aktif untuk koordinasi kerja harian kita!",
+    createdAt: new Date(Date.now() - 3600000 * 48).toISOString()
+  },
+  {
+    id: "chat-2",
+    senderName: "Dewi Lestari",
+    senderRole: "Manager",
+    channel: "#umum",
+    message: "Terima kasih Pak Budi. Teman-teman staf lainnya, mohon lapor setiap perkembangan di lapangan melalui grup chat di bawah ini ya.",
+    createdAt: new Date(Date.now() - 3600000 * 47).toISOString()
+  },
+  {
+    id: "chat-3",
+    senderName: "Rudi Tabuti",
+    senderRole: "Staff Maintenance",
+    channel: "#perbaikan-teknis",
+    message: "Laporan: AC bocor di kamar 102 lantai 1 sudah selesai diperbaiki dan di-service freon-nya. Status kamar aman untuk disewakan kembali.",
+    createdAt: new Date(Date.now() - 3600000 * 12).toISOString()
+  },
+  {
+    id: "chat-4",
+    senderName: "Siti Rahma",
+    senderRole: "Finance",
+    channel: "#keuangan-admin",
+    message: "Tagihan sewa bulanan untuk Bapak Rian Hidayat (kamar 101) sudah lunas terkonfirmasi hari ini. Data billing di sistem sudah saya update.",
+    createdAt: new Date(Date.now() - 3600000 * 8).toISOString()
+  },
+  {
+    id: "chat-5",
+    senderName: "Anton Hartono",
+    senderRole: "Receptionist",
+    channel: "#penyewa-bantuan",
+    message: "Tamu kamar 204 menanyakan tentang password wifi yang baru berjalan lambat. Apakah ada gangguan ISP?",
+    createdAt: new Date(Date.now() - 1800000).toISOString()
+  },
+  {
+    id: "chat-6",
+    senderName: "Dewi Lestari",
+    senderRole: "Manager",
+    channel: "#penyewa-bantuan",
+    message: "Tadi server pusat ISP menginfokan perbaikan link kabel utama. Estimasi bandwith kembali normal 10 menit lagi ya Anton.",
+    createdAt: new Date(Date.now() - 900000).toISOString()
+  }
+];
+
