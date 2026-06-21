@@ -1,0 +1,300 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account registration and role configuration",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": {
+          "type": "string",
+          "enum": [
+            "Super Admin",
+            "Owner",
+            "Manager",
+            "Receptionist",
+            "Finance",
+            "Marketing/Sales",
+            "Staff Maintenance",
+            "Tenant/Penyewa"
+          ]
+        },
+        "isActive": { "type": "boolean" },
+        "phone": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "isActive"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "Property building description, such as hotel, apartments, boarding houses, villas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Hotel", "Apartement", "Kost", "Villa"] },
+        "address": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "landArea": { "type": "number" },
+        "buildingArea": { "type": "number" },
+        "floorsCount": { "type": "integer" },
+        "buildYear": { "type": "integer" },
+        "documents": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "type", "address"]
+    },
+    "Unit": {
+      "title": "Unit",
+      "description": "A specific rental unit or room in a property building",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "unitNumber": { "type": "string" },
+        "floor": { "type": "integer" },
+        "type": { "type": "string" },
+        "size": { "type": "number" },
+        "price": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["Available", "Reserved", "Occupied", "Maintenance", "Cleaning"]
+        },
+        "facilities": { "type": "array" },
+        "imageUrl": { "type": "string" },
+        "floorPlanUrl": { "type": "string" }
+      },
+      "required": ["id", "propertyId", "unitNumber", "status", "price"]
+    },
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Tenant registration profile and physical files metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ktpNumber": { "type": "string" },
+        "ktpUrl": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "emergencyContact": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "phone"]
+    },
+    "Reservation": {
+      "title": "Reservation",
+      "description": "Room booking tracking entries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "unitId": { "type": "string" },
+        "checkInDate": { "type": "string", "format": "date" },
+        "checkOutDate": { "type": "string", "format": "date" },
+        "deposit": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["Paid", "Unpaid", "Overdue"] },
+        "status": {
+          "type": "string",
+          "enum": ["Pending", "Confirmed", "Checked In", "Checked Out", "Cancelled"]
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "tenantId", "propertyId", "unitId", "status", "checkInDate", "checkOutDate"]
+    },
+    "Contract": {
+      "title": "Contract",
+      "description": "Digital contract configuration with embedded digital signs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "unitId": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "monthlyRent": { "type": "number" },
+        "termsDescription": { "type": "string" },
+        "tenantSignature": { "type": "string" },
+        "ownerSignature": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "tenantId", "propertyId", "unitId", "startDate", "endDate"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Rent and utility charge summaries generated automatically or manually",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "unitId": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "dueDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Paid", "Unpaid", "Overdue"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "tenantId", "invoiceNumber", "totalAmount", "status", "dueDate"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Actual transactions logging tied directly to invoices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceId": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentDate": { "type": "string", "format": "date-time" },
+        "method": { "type": "string", "enum": ["Transfer", "Cash", "QRIS", "Payment Gateway"] },
+        "transactionNumber": { "type": "string" },
+        "proofUrl": { "type": "string" }
+      },
+      "required": ["id", "invoiceId", "amount", "paymentDate", "method"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Expense logger for salaries, water, electricity, wifi, etc.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "category": { "type": "string", "enum": ["Maintenance", "Salary", "Electricity", "Water", "Internet", "Operasional"] },
+        "amount": { "type": "number" },
+        "expenseDate": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["id", "propertyId", "category", "amount", "expenseDate"]
+    },
+    "Maintenance": {
+      "title": "Maintenance",
+      "description": "Maintenance tickets or reported complaints from tenants",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "unitId": { "type": "string" },
+        "reportedBy": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] },
+        "technician": { "type": "string" },
+        "status": { "type": "string", "enum": ["Open", "Process", "Completed"] },
+        "cost": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "propertyId", "unitId", "priority", "status"]
+    },
+    "Inventory": {
+      "title": "Inventory",
+      "description": "Asset items inside the rooms or buildings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "location": { "type": "string" },
+        "name": { "type": "string" },
+        "quantity": { "type": "integer" },
+        "price": { "type": "number" },
+        "condition": { "type": "string", "enum": ["Good", "Needs Repair", "Broken"] }
+      },
+      "required": ["id", "propertyId", "name", "quantity", "condition"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Alert notifications to be displayed in user center",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "category": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "message", "isRead", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Monthly and operational consolidated reports metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "month": { "type": "string" },
+        "totalRevenue": { "type": "number" },
+        "totalExpense": { "type": "number" },
+        "avgOccupancy": { "type": "number" },
+        "notes": { "type": "string" },
+        "generatedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "totalRevenue", "totalExpense", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data and role constraints"
+    },
+    "/properties/{propertyId}": {
+      "schema": "Property",
+      "description": "Property description details"
+    },
+    "/properties/{propertyId}/units/{unitId}": {
+      "schema": "Unit",
+      "description": "Unit configurations for individual rooms"
+    },
+    "/tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "Tenants directories"
+    },
+    "/reservations/{reservationId}": {
+      "schema": "Reservation",
+      "description": "Reservation bookings"
+    },
+    "/contracts/{contractId}": {
+      "schema": "Contract",
+      "description": "Active lease digital contracts"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Payment invoices catalog"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Logged cashflow receipts"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Operational cash outflow tracking lines"
+    },
+    "/maintenance/{maintenanceId}": {
+      "schema": "Maintenance",
+      "description": "Maintenance tickets logged"
+    },
+    "/inventory/{inventoryId}": {
+      "schema": "Inventory",
+      "description": "Assets log in rooms or stores"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System broadcast alerts log"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Consolidated administrative summaries"
+    }
+  }
+}
