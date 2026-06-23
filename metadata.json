@@ -1,5 +1,5 @@
 {
-  "name": "Property Management System Pro (PMS Pro)",
+  "name": "Forsdig PMS Pro",
   "description": "Enterprise Property Management System (PMS) for managing hotels, apartments, villas, and pension rentals with real-time analytics, CRM leads, accounting, and lease contract signing.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

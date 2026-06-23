@@ -25,7 +25,8 @@ import {
   MapPin,
   CheckSquare,
   Minus,
-  Edit
+  Edit,
+  Upload
 } from "lucide-react";
 import { Unit, Property, Employee } from "../types";
 
@@ -46,6 +47,7 @@ interface HousekeepingLog {
   consumedItems: string[];
   completedAt: string;
   notes: string;
+  imageUrl?: string;
 }
 
 interface ShiftRoster {
@@ -164,6 +166,8 @@ export default function HousekeepingInventory({
   const [cleanType, setCleanType] = useState<string>("Turnover Clean (Check-out)");
   const [assignedStaff, setAssignedStaff] = useState<string>("Agus Prasetyo");
   const [cleaningNotes, setCleaningNotes] = useState<string>("");
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
   
   // Interactive checklist states inside modal
   const [checklistBedLinen, setChecklistBedLinen] = useState(false);
@@ -260,7 +264,8 @@ export default function HousekeepingInventory({
       staffName: assignedStaff,
       consumedItems: consumed,
       completedAt: new Date().toLocaleString("id-ID", { hour12: false }) + " WIB",
-      notes: cleaningNotes || "Pembersihan berkala rutin."
+      notes: cleaningNotes || "Pembersihan berkala rutin.",
+      imageUrl: uploadedImage || undefined
     };
 
     setLogs([newLog, ...logs]);
@@ -274,6 +279,7 @@ export default function HousekeepingInventory({
     setChecklistToilet(false);
     setChecklistFloor(false);
     setChecklistDisinfect(false);
+    setUploadedImage(null);
 
     alert(`Hore! Kamar No ${activeCleanModalUnit.unitNumber} berhasil disterilisasi & siap disewa. Logistik dikonsumsi: ${consumed.join(", ")}`);
   };
@@ -906,11 +912,25 @@ export default function HousekeepingInventory({
                       </div>
                     </div>
 
-                    <div className="md:col-span-3 text-left">
+                    <div className="md:col-span-3 text-left space-y-2">
                       <span className="text-[8px] text-gray-400 uppercase font-black block">Catatan Pemeriksaan:</span>
                       <p className="text-[10px] text-slate-600 mt-1 italic font-semibold leading-relaxed">
                         "{log.notes || "Kondisi sangat bersih, amenities diganti lengkap."}"
                       </p>
+
+                      {log.imageUrl && (
+                        <div className="pt-2">
+                          <span className="text-[8px] text-gray-400 uppercase font-black block mb-1">Bukti Foto Lampiran:</span>
+                          <div className="relative inline-block overflow-hidden rounded-xl border border-slate-200/80 bg-white">
+                            <img
+                              src={log.imageUrl}
+                              alt="Bukti pembersihan"
+                              className="max-h-28 object-cover rounded-xl transition hover:opacity-90 cursor-pointer"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1190,7 +1210,7 @@ export default function HousekeepingInventory({
               </div>
 
               {/* Custom logs text */}
-              <div className="space-y-1 bg-white p-3.5 rounded-2xl border border-slate-150">
+              <div className="space-y-1 bg-white p-3.5 rounded-2xl border border-slate-150 font-sans">
                 <label className="text-[9px] font-black text-gray-500 uppercase block">Laporan Manual Janitor</label>
                 <textarea
                   required
@@ -1200,6 +1220,98 @@ export default function HousekeepingInventory({
                   className="w-full text-slate-800 p-2.5 border border-slate-200 rounded-xl bg-slate-50 text-xs focus:bg-white"
                   rows={2}
                 />
+              </div>
+
+              {/* Image Upload Area */}
+              <div className="space-y-1 bg-white p-3.5 rounded-2xl border border-slate-150 text-left font-sans">
+                <label className="text-[9px] font-black text-gray-500 uppercase block flex justify-between">
+                  <span>Unggah Foto Bukti Kerja (Selesai Pembersihan)</span>
+                  <span className="text-gray-400 font-normal">Base64 Offline</span>
+                </label>
+                
+                {uploadedImage ? (
+                  <div className="relative mt-2 rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                    <img
+                      src={uploadedImage}
+                      alt="Uploaded proof"
+                      className="w-full h-32 object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setUploadedImage(null)}
+                      className="absolute top-2 right-2 p-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full transition cursor-pointer"
+                      title="Hapus Foto"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    <div className="p-2 text-[9px] text-gray-500 font-mono text-center">
+                      Foto bukti siap didokumentasikan di Riwayat Logs ✔️
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragOver(true);
+                    }}
+                    onDragLeave={() => setIsDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragOver(false);
+                      const files = e.dataTransfer.files;
+                      if (files && files[0]) {
+                        const file = files[0];
+                        if (!file.type.startsWith("image/")) {
+                          alert("Mohon masukkan tipe file gambar (.png, .jpg, .jpeg, etc)!");
+                          return;
+                        }
+                        if (file.size > 3 * 1024 * 1024) {
+                          alert("Ukuran gambar melebihi limit 3MB!");
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setUploadedImage(reader.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className={`mt-2 border-2 border-dashed rounded-xl p-4 transition flex flex-col items-center justify-center gap-1.5 cursor-pointer text-center ${
+                      isDragOver
+                        ? "border-emerald-500 bg-emerald-50/50"
+                        : "border-slate-250 hover:border-emerald-500 hover:bg-emerald-50/10"
+                    }`}
+                    onClick={() => {
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.accept = "image/*";
+                      input.onchange = (e) => {
+                        const target = e.target as HTMLInputElement;
+                        const files = target.files;
+                        if (files && files[0]) {
+                          const file = files[0];
+                          if (file.size > 3 * 1024 * 1024) {
+                            alert("Ukuran gambar melebihi limit 3MB!");
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setUploadedImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      };
+                      input.click();
+                    }}
+                  >
+                    <Upload className="h-6 w-6 text-slate-400 animate-bounce" />
+                    <div className="font-semibold text-slate-700 text-[11px]">
+                      Tarik & Lepas gambar di sini, atau <span className="text-emerald-600 underline">Pilih File</span>
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-medium">Batas ukuran file maksimal 3 Megabyte (Format JPG, PNG)</span>
+                  </div>
+                )}
               </div>
             </div>
 
