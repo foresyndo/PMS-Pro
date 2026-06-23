@@ -54,7 +54,8 @@ export default function SupabaseModule({
     { displayName: "Tagihan Bulanan (invoices)", dbName: "invoices", desc: "Invoice, rincian biaya sewa, status pembayaran" },
     { displayName: "Arus Kas Pengeluaran (expenses)", dbName: "expenses", desc: "OPEX, biaya perawatan, gaji, token listrik" },
     { displayName: "Laporan Pemeliharaan (maintenance_tickets)", dbName: "maintenance_tickets", desc: "Komplain kerusakan, AC, ledeng, status perbaikan" },
-    { displayName: "Log Pembayaran (payment_logs)", dbName: "payment_logs", desc: "Riwayat pembayaran & bukti transfer sewa" }
+    { displayName: "Log Pembayaran (payment_logs)", dbName: "payment_logs", desc: "Riwayat pembayaran & bukti transfer sewa" },
+    { displayName: "Daftar User Aplikasi (role_credentials)", dbName: "role_credentials", desc: "Menyimpan email user, role, dan paspor kunci/sandi masuk" }
   ];
 
   const handlePullClick = async () => {

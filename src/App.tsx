@@ -203,6 +203,9 @@ export default function App() {
         if (results.tablesStatus["work_chats"] && results.workChats && results.workChats.length > 0) {
           setChatMessages(results.workChats);
         }
+        if (results.tablesStatus["role_credentials"] && results.roleCredentials && results.roleCredentials.length > 0) {
+          setRoleCredentials(results.roleCredentials);
+        }
         
         registerLog("Data PMS ter-sinkronisasi langsung dengan Supabase Cloud!", "Sistem");
       }
@@ -228,7 +231,8 @@ export default function App() {
         expenses,
         maintenanceTickets: maintenance,
         paymentLogs: [],
-        workChats: chatMessages
+        workChats: chatMessages,
+        roleCredentials
       });
       if (res.success) {
         registerLog("Berhasil seeding database lokal ke Supabase Cloud", "Sistem");
@@ -295,6 +299,18 @@ export default function App() {
   const [payroll, setPayroll] = useState<Payroll[]>(INITIAL_PAYROLL);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(INITIAL_LEAVE_REQUESTS);
 
+  const [payrollEmails, setPayrollEmails] = useState<any[]>(() => {
+    const saved = localStorage.getItem("pmspro_payroll_emails");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse payroll emails", e);
+      }
+    }
+    return [];
+  });
+
   const handleAddEmployee = (emp: Employee) => {
     setEmployees([emp, ...employees]);
     registerLog(`Menambahkan karyawan baru: "${emp.name}" (${emp.role})`, "Sistem");
@@ -319,14 +335,48 @@ export default function App() {
 
   const handleAddPayroll = (pay: Payroll) => {
     setPayroll([pay, ...payroll]);
-    const empName = employees.find(e => e.id === pay.employeeId)?.name || pay.employeeId;
+    const matchedEmployee = employees.find(e => e.id === pay.employeeId);
+    const empName = matchedEmployee?.name || pay.employeeId;
     registerLog(`Slip pembayaran gaji bulan ${pay.month} berhasil diterbitkan: "${empName}"`, "Sistem");
+
+    // Send mock email for publishing slip
+    const mockEmail = {
+      id: "email-" + Date.now().toString(),
+      recipientEmail: matchedEmployee?.email || "employee@pmspro.com",
+      recipientName: empName,
+      subject: `[PMS PRO] Slip Gaji Baru Diterbitkan - ${pay.month}`,
+      body: `Halo ${empName},\n\nSlip gaji Anda untuk periode ${pay.month} telah diterbitkan oleh bagian HRD dengan rincian berikut:\n- Gaji Pokok: Rp ${pay.basicSalary.toLocaleString("id-ID")}\n- Tunjangan: Rp ${pay.allowance.toLocaleString("id-ID")}\n- Potongan: Rp ${pay.deductions.toLocaleString("id-ID")}\n- Gaji Bersih: Rp ${pay.netSalary.toLocaleString("id-ID")}\n\nStatus saat ini: MENUNGGU PERSETUJUAN & PROSES TRANSFER DANA OLEH DIVISI KEUANGAN (FINANCE).\n\nSalam,\nDepartemen HRD\nPMS Pro Properties`,
+      sentAt: new Date().toLocaleString("id-ID"),
+      status: "Disampaikan (Published)",
+      type: "Published"
+    };
+    const updatedEmails = [mockEmail, ...payrollEmails];
+    setPayrollEmails(updatedEmails);
+    localStorage.setItem("pmspro_payroll_emails", JSON.stringify(updatedEmails));
   };
 
   const handleUpdatePayroll = (pay: Payroll) => {
     setPayroll(payroll.map(p => p.id === pay.id ? pay : p));
-    const empName = employees.find(e => e.id === pay.employeeId)?.name || pay.employeeId;
+    const matchedEmployee = employees.find(e => e.id === pay.employeeId);
+    const empName = matchedEmployee?.name || pay.employeeId;
     registerLog(`Gaji bersih terbayar lunas kepada staf: "${empName}"`, "Sistem");
+
+    // Send mock email for finance approval / payment
+    if (pay.status === "Paid") {
+      const mockEmail = {
+        id: "email-" + Date.now().toString(),
+        recipientEmail: matchedEmployee?.email || "employee@pmspro.com",
+        recipientName: empName,
+        subject: `[PMS PRO] GAJI TELAH DITRANSFER - Periode ${pay.month}`,
+        body: `Halo ${empName},\n\nKabar baik! Gaji Anda untuk periode ${pay.month} telah DISETUJUI & DITRANSFER LUNAS oleh Divisi Keuangan (Finance) ke rekening terdaftar Anda.\n\nJumlah Ditransfer: Rp ${pay.netSalary.toLocaleString("id-ID")}\nReferensi Pembayaran: TRF-MANDIRI-${Date.now().toString().slice(-6)}\n\nSilakan periksa mutasi rekening Anda atau unduh file slip gaji PDF resmi melalui portal HRIS PMS Pro.\n\nSalam,\nDepartemen Keuangan (Finance)\nPMS Pro Properties`,
+        sentAt: new Date().toLocaleString("id-ID"),
+        status: "Sukses Terkirim (Paid)",
+        type: "Approved"
+      };
+      const updatedEmails = [mockEmail, ...payrollEmails];
+      setPayrollEmails(updatedEmails);
+      localStorage.setItem("pmspro_payroll_emails", JSON.stringify(updatedEmails));
+    }
   };
 
   const handleAddLeaveRequest = (leave: LeaveRequest) => {
@@ -772,6 +822,7 @@ export default function App() {
 
                     const updated = [...roleCredentials, newCred];
                     setRoleCredentials(updated);
+                    saveToCloud("role_credentials", newCred);
                     
                     // Prepopulate manual login credentials
                     setManualEmail(trimmedEmail);
@@ -966,42 +1017,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Interactive Dynamic Switch Role in Header for Evaluation convenience */}
+                {/* Logged user email representation */}
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 bg-slate-150 py-1.5 px-3 border border-gray-150 rounded-full text-xs">
-                    <Sliders className="h-4 w-4 text-slate-500" />
-                    <span className="text-[10px] text-gray-500 font-extrabold uppercase hidden md:inline">Demo Switcher:</span>
-                    <select
-                      value={activeRole}
-                      onChange={(e) => {
-                        const nextRole = e.target.value as UserRole;
-                        setActiveRole(nextRole);
-                        // Redirect automatically
-                        if (nextRole === "Staff Maintenance") {
-                          setActiveTab("maintenance");
-                        } else if (nextRole === "Finance") {
-                          setActiveTab("keuangan");
-                        } else if (nextRole === "HR") {
-                          setActiveTab("hris");
-                        } else {
-                          setActiveTab("dashboard");
-                        }
-                        registerLog(`Mengubah otorisasi sistem ke: ${nextRole}`, "Sistem");
-                      }}
-                      className="bg-transparent text-slate-850 font-extrabold border-none outline-none focus:ring-0 text-xs py-0 pr-6"
-                    >
-                      <option value="Super Admin">Super Admin</option>
-                      <option value="Owner">Owner (Pemilik)</option>
-                      <option value="HR">Human Resource (HR)</option>
-                      <option value="Manager">Manager</option>
-                      <option value="Receptionist">Receptionist</option>
-                      <option value="Finance">Finance Acc</option>
-                      <option value="Marketing/Sales">Marketing</option>
-                      <option value="Staff Maintenance">Maintenance</option>
-                    </select>
-                  </div>
-
-                  {/* Logged user email representation */}
                   <div className="hidden lg:flex items-center gap-2 text-xs">
                     <div className="h-8 w-8 rounded-full bg-emerald-50 border flex items-center justify-center text-emerald-800 font-bold">
                       SV
@@ -1122,6 +1139,7 @@ export default function App() {
                   <HousekeepingInventory
                     units={units}
                     properties={properties}
+                    employees={employees}
                     onUpdateUnitStatus={handleUpdateUnitStatus}
                   />
                 )}
@@ -1146,6 +1164,7 @@ export default function App() {
                     attendance={attendance}
                     payroll={payroll}
                     leaveRequests={leaveRequests}
+                    payrollEmails={payrollEmails}
                     onAddEmployee={handleAddEmployee}
                     onUpdateEmployee={handleUpdateEmployee}
                     onDeleteEmployee={handleDeleteEmployee}

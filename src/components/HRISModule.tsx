@@ -28,7 +28,10 @@ import {
   Moon,
   Sunset,
   CalendarCheck,
-  RefreshCw
+  RefreshCw,
+  Mail,
+  Send,
+  Eye
 } from "lucide-react";
 import { Employee, Attendance, Payroll, LeaveRequest, ShiftSchedule, ShiftType } from "../types";
 
@@ -37,6 +40,7 @@ interface HRISModuleProps {
   attendance: Attendance[];
   payroll: Payroll[];
   leaveRequests: LeaveRequest[];
+  payrollEmails?: any[];
   onAddEmployee: (emp: Employee) => void;
   onUpdateEmployee: (emp: Employee) => void;
   onDeleteEmployee: (id: string) => void;
@@ -52,6 +56,7 @@ export default function HRISModule({
   attendance,
   payroll,
   leaveRequests,
+  payrollEmails = [],
   onAddEmployee,
   onUpdateEmployee,
   onDeleteEmployee,
@@ -110,6 +115,10 @@ export default function HRISModule({
   const [schedulerSearch, setSchedulerSearch] = useState<string>("");
   const [isExportingShift, setIsExportingShift] = useState(false);
   const [showExportSuccess, setShowExportSuccess] = useState(false);
+
+  // Email Notification modal & filter states
+  const [selectedEmail, setSelectedEmail] = useState<any | null>(null);
+  const [emailFilter, setEmailFilter] = useState<"all" | "Published" | "Approved">("all");
 
 
   // CRUD & Form State for Employee
@@ -1331,6 +1340,125 @@ export default function HRISModule({
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Pusat Notifikasi Email Slip Gaji (Mock) */}
+              <div id="payroll-email-notifications-hub" className="bg-slate-50 border border-slate-150 rounded-2xl p-5 space-y-4 shadow-3xs">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                  <div className="flex items-center gap-2.5 text-left">
+                    <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-xl">
+                      <Mail className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Pusat Integrasi Notifikasi Email Slip Gaji (Mock)</h4>
+                      <p className="text-[10px] text-gray-500 font-semibold leading-normal">
+                        Otomasi pengiriman notifikasi email otomatis ke staf jika slip diterbitkan (HR) & disetujui (Finance)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 self-start sm:self-center">
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Apakah Anda yakin ingin mengosongkan riwayat email terkirim?")) {
+                          localStorage.removeItem("pmspro_payroll_emails");
+                          window.location.reload();
+                        }
+                      }}
+                      className="px-2.5 py-1 text-[10px] uppercase font-black text-rose-700 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-transparent rounded-lg transition shrink-0"
+                    >
+                      Hapus Log Notifikasi
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter and stats sub-bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-extrabold uppercase">Filter Tipe Email:</span>
+                    <div className="flex bg-slate-150 p-0.5 rounded-lg border border-slate-250/20 text-[10px] font-bold">
+                      <button
+                        onClick={() => setEmailFilter("all")}
+                        className={`px-2.5 py-1 rounded-md transition ${emailFilter === "all" ? "bg-white text-slate-800 shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                      >
+                        Semua ({payrollEmails.length})
+                      </button>
+                      <button
+                        onClick={() => setEmailFilter("Published")}
+                        className={`px-2.5 py-1 rounded-md transition ${emailFilter === "Published" ? "bg-white text-slate-800 shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                      >
+                        Diterbitkan HR ({payrollEmails.filter(e => e.type === "Published").length})
+                      </button>
+                      <button
+                        onClick={() => setEmailFilter("Approved")}
+                        className={`px-2.5 py-1 rounded-md transition ${emailFilter === "Approved" ? "bg-white text-slate-800 shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                      >
+                        Disetujui Finance ({payrollEmails.filter(e => e.type === "Approved").length})
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-gray-500 font-semibold flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <strong>Otomasi SMTP Mock:</strong> Status Server Aktif (Simulation Mode)
+                  </div>
+                </div>
+
+                {/* Grid list or blank representation */}
+                {payrollEmails.length === 0 ? (
+                  <div className="bg-white border border-slate-150 p-6 rounded-2xl text-center space-y-2">
+                    <Mail className="h-8 w-8 text-slate-300 mx-auto" />
+                    <p className="text-xs text-slate-500 font-bold">Belum ada email notifikasi terkirim.</p>
+                    <p className="text-[10px] text-slate-400 leading-normal max-w-sm mx-auto">
+                      Cobalah untuk menerbitkan slip gaji baru melalui tombol <strong>Terbitkan Slip Gaji</strong> di atas, atau menyetujui transfer gaji melalui modul <strong>Keuangan & Akuntansi (Finance)</strong> untuk memicu sistem notifikasi email otomatis ini.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
+                    {payrollEmails
+                      .filter(e => emailFilter === "all" || e.type === emailFilter)
+                      .map((mail: any) => (
+                        <div key={mail.id} className="bg-white border border-slate-150 hover:border-emerald-200 rounded-xl p-3.5 shadow-3xs transition relative flex flex-col justify-between gap-3 text-left">
+                          <div className="space-y-1.5 text-left">
+                            <div className="flex justify-between items-start gap-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                mail.type === "Published"
+                                  ? "bg-amber-100 text-amber-900 border border-amber-200"
+                                  : "bg-emerald-100 text-emerald-900 border border-emerald-200"
+                              }`}>
+                                {mail.type === "Published" ? "HR: Penerbitan" : "Finance: Pelunasan"}
+                              </span>
+                              <span className="text-[9px] font-mono font-medium text-slate-400">{mail.sentAt}</span>
+                            </div>
+
+                            <p className="text-[11px] font-bold text-slate-800 truncate" title={mail.subject}>
+                              {mail.subject}
+                            </p>
+
+                            <div className="text-[10px] text-slate-650 leading-relaxed font-semibold">
+                              <p><span className="text-slate-400 font-bold uppercase text-[9px]">Kepada:</span> {mail.recipientName} ({mail.recipientEmail})</p>
+                              <p className="line-clamp-2 text-[9px] text-slate-400 font-mono mt-1 bg-slate-50 p-1.5 rounded-lg border border-slate-150 border-dashed">
+                                {mail.body}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center border-t border-slate-100 pt-2 shrink-0">
+                            <span className="text-[9px] text-emerald-600 font-black flex items-center gap-1 uppercase">
+                              <CheckCircle className="h-3.5 w-3.5 text-emerald-500" /> Delivered
+                            </span>
+                            
+                            <button
+                              onClick={() => setSelectedEmail(mail)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <Eye className="h-3 w-3 text-slate-500" /> Lihat Email
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2632,6 +2760,91 @@ export default function HRISModule({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------
+          MODAL 5: MOCK EMAIL PREVIEW CLIENT
+          ------------------------------------- */}
+      {selectedEmail && (
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+            {/* Header / AppBar of the email client */}
+            <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 text-left">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-slate-800 rounded text-slate-100">
+                  <Mail className="h-4 w-4" />
+                </span>
+                <div>
+                  <h4 className="font-bold text-xs tracking-wide uppercase">PMS Email Transporter Simulator</h4>
+                  <p className="text-[9px] text-slate-400 font-mono font-medium">Mail Delivery Receipt ID: {selectedEmail.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedEmail(null)}
+                className="text-slate-400 hover:text-white transition text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Simulated Email Frame */}
+            <div className="p-5 flex-1 overflow-y-auto space-y-4 bg-slate-50 text-xs">
+              {/* Envelope Info */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/60 shadow-3xs space-y-2 text-left">
+                <div className="flex justify-between items-start border-b border-slate-100 pb-2">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Envelope Info</span>
+                  <span className="bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Delivered (MOCK)
+                  </span>
+                </div>
+                <div className="grid grid-cols-[60px_1fr] gap-x-2 gap-y-1.5 text-slate-700 leading-normal font-semibold">
+                  <span className="text-slate-400 font-bold text-[10px] uppercase">Pengirim:</span>
+                  <span>PMS Pro AutoMailer &lt;noreply@pmsproperties.co.id&gt;</span>
+                  
+                  <span className="text-slate-400 font-bold text-[10px] uppercase">Penerima:</span>
+                  <span>{selectedEmail.recipientName} &lt;{selectedEmail.recipientEmail}&gt;</span>
+                  
+                  <span className="text-slate-400 font-bold text-[10px] uppercase">Waktu:</span>
+                  <span className="font-mono">{selectedEmail.sentAt}</span>
+                  
+                  <span className="text-slate-400 font-bold text-[10px] uppercase">Subjek:</span>
+                  <span className="text-slate-900 font-bold">{selectedEmail.subject}</span>
+                </div>
+              </div>
+
+              {/* Email Content Body */}
+              <div className="bg-white rounded-2xl border border-slate-200/60 shadow-3xs overflow-hidden">
+                <div className="bg-slate-100 px-4 py-2 border-b border-slate-100 text-[10px] text-slate-400 font-bold uppercase tracking-wider text-left">
+                  HTML PREVIEW CONTAINER
+                </div>
+                <div className="p-6 text-slate-700 text-xs leading-relaxed text-left whitespace-pre-wrap font-sans bg-white">
+                  {/* Visual Header Inside Email */}
+                  <div className="border-b-2 border-emerald-700 pb-4 mb-4 select-none">
+                    <h2 className="text-emerald-800 font-black text-sm uppercase tracking-wider">PMS PRO PROPERTIES</h2>
+                    <p className="text-[8px] text-slate-400 leading-none tracking-widest font-mono uppercase mt-1">Automated payroll notifications-carrier-v2</p>
+                  </div>
+
+                  <p className="font-semibold text-slate-800">{selectedEmail.body}</p>
+
+                  <div className="mt-8 border-t border-slate-100 pt-4 text-[9px] text-slate-400 space-y-1 select-none font-medium text-left leading-relaxed">
+                    <p className="font-bold uppercase text-[8px] text-slate-500">Pemberitahuan Keamanan:</p>
+                    <p>Ini adalah email otomatis yang dikirim langsung melalui trigger SMTP dari Server PMS Pro. Jangan membalas email ini secara langsung karena alamat pengirim tidak dipantau.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer containing action button */}
+            <div className="p-3.5 bg-slate-50 border-t border-slate-200/80 flex justify-end shrink-0">
+              <button
+                onClick={() => setSelectedEmail(null)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition cursor-pointer"
+              >
+                Kembali ke Portal HRIS
+              </button>
+            </div>
           </div>
         </div>
       )}

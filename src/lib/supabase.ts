@@ -169,6 +169,13 @@ CREATE TABLE IF NOT EXISTS work_chats (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
+-- 11. Tabel Role Credentials (Daftar User)
+CREATE TABLE IF NOT EXISTS role_credentials (
+  role TEXT NOT NULL,
+  email TEXT PRIMARY KEY,
+  passport TEXT NOT NULL
+);
+
 -- Aktifkan Row Level Security (RLS) tapi izinkan akses anonim demi kemudahan demo
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE units ENABLE ROW LEVEL SECURITY;
@@ -180,6 +187,7 @@ ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE maintenance_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE work_chats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE role_credentials ENABLE ROW LEVEL SECURITY;
 
 -- Kebijakan Akses Publik untuk kemudahan Integrasi Client Demo
 CREATE POLICY "Akses Terbuka Properties" ON properties FOR ALL USING (true) WITH CHECK (true);
@@ -192,6 +200,7 @@ CREATE POLICY "Akses Terbuka Expenses" ON expenses FOR ALL USING (true) WITH CHE
 CREATE POLICY "Akses Terbuka Maintenance Tickets" ON maintenance_tickets FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Akses Terbuka Payment Logs" ON payment_logs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Akses Terbuka Work Chats" ON work_chats FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Akses Terbuka Role Credentials" ON role_credentials FOR ALL USING (true) WITH CHECK (true);
 `;
 };
 
@@ -240,6 +249,7 @@ export const loadAllFromSupabase = async () => {
     maintenanceTickets: [] as MaintenanceTicket[],
     paymentLogs: [] as PaymentLog[],
     workChats: [] as WorkChatMessage[],
+    roleCredentials: [] as any[],
     tablesStatus: {} as Record<string, boolean>
   };
 
@@ -253,7 +263,8 @@ export const loadAllFromSupabase = async () => {
     { key: "expenses", table: "expenses" },
     { key: "maintenanceTickets", table: "maintenance_tickets" },
     { key: "paymentLogs", table: "payment_logs" },
-    { key: "workChats", table: "work_chats" }
+    { key: "workChats", table: "work_chats" },
+    { key: "roleCredentials", table: "role_credentials" }
   ];
 
   for (const t of tables) {
@@ -320,6 +331,7 @@ export const pushAllToSupabase = async (payload: {
   maintenanceTickets: MaintenanceTicket[];
   paymentLogs: PaymentLog[];
   workChats?: WorkChatMessage[];
+  roleCredentials?: any[];
 }) => {
   if (!supabase) return { success: false, error: "Supabase not initialized." };
 
@@ -333,7 +345,8 @@ export const pushAllToSupabase = async (payload: {
     { name: "expenses", list: payload.expenses },
     { name: "maintenance_tickets", list: payload.maintenanceTickets },
     { name: "payment_logs", list: payload.paymentLogs },
-    { name: "work_chats", list: payload.workChats || [] }
+    { name: "work_chats", list: payload.workChats || [] },
+    { name: "role_credentials", list: payload.roleCredentials || [] }
   ];
 
   const results: Record<string, boolean> = {};
