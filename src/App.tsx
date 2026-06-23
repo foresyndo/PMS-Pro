@@ -20,7 +20,16 @@ import {
   X,
   Clock,
   Briefcase,
-  MessageSquare
+  MessageSquare,
+  Lock,
+  Mail,
+  Key,
+  Eye,
+  EyeOff,
+  UserPlus,
+  ShieldCheck,
+  Trash2,
+  Plus
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -81,14 +90,53 @@ import CrmMarketing from "./components/CrmMarketing";
 import DigitalContract from "./components/DigitalContract";
 import WorkChatModule from "./components/WorkChatModule";
 import HRISModule from "./components/HRISModule";
+import RoleAccountsModule, { RoleCredential } from "./components/RoleAccountsModule";
 
 export default function App() {
+  // Default and saved multi-role credentials config
+  const DEFAULT_ROLE_CREDENTIALS: RoleCredential[] = [
+    { role: "Super Admin", email: "admin@pms.pro", passport: "admin123" },
+    { role: "Owner", email: "owner@pms.pro", passport: "owner123" },
+    { role: "Manager", email: "manager@pms.pro", passport: "manager123" },
+    { role: "Receptionist", email: "recep@pms.pro", passport: "recep123" },
+    { role: "Finance", email: "finance@pms.pro", passport: "finance123" },
+    { role: "Marketing/Sales", email: "marketing@pms.pro", passport: "sales123" },
+    { role: "Staff Maintenance", email: "staff@pms.pro", passport: "staff123" },
+    { role: "Tenant/Penyewa", email: "tenant@pms.pro", passport: "tenant123" },
+    { role: "HR", email: "hrd@pms.pro", passport: "hrd123" }
+  ];
+
+  const [roleCredentials, setRoleCredentials] = useState<RoleCredential[]>(() => {
+    try {
+      const saved = localStorage.getItem("pms_role_credentials");
+      return saved ? JSON.parse(saved) : DEFAULT_ROLE_CREDENTIALS;
+    } catch (e) {
+      return DEFAULT_ROLE_CREDENTIALS;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("pms_role_credentials", JSON.stringify(roleCredentials));
+  }, [roleCredentials]);
+
   // Session states
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // set to false for testing/demo so login screen actually presents itself naturally! Oh wait, let's keep default as true or let user toggle it, wait, we can default isLoggedIn to false, or let's keep it false so they see the page. Wait, let's look at standard default. Previously it was true. Let's default to false so users can see the magnificent new login and registration screen instantly!
   const [activeRole, setActiveRole] = useState<UserRole>("Super Admin");
-  const [userEmail, setUserEmail] = useState("sahrul.viona12@gmail.com");
+  const [userEmail, setUserEmail] = useState("admin@pms.pro");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Modified Login Portal States
+  const [loginSubTab, setLoginSubTab] = useState<"login" | "register" | "accounts">("login");
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualPassport, setManualPassport] = useState("");
+  const [showPassportLogin, setShowPassportLogin] = useState(false);
+
+  // User registration states
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassport, setRegPassport] = useState("");
+  const [regRole, setRegRole] = useState<UserRole>("Manager");
+  const [regSuccess, setRegSuccess] = useState(false);
 
   // Active database state logs
   const [properties, setProperties] = useState<Property[]>(INITIAL_PROPERTIES);
@@ -496,6 +544,9 @@ export default function App() {
 
   // Multi-role access control check helper
   const isTabAvailable = (tab: string) => {
+    if (tab === "role-accounts") {
+      return activeRole === "Super Admin" || activeRole === "Owner";
+    }
     if (tab === "hris") {
       return activeRole === "Super Admin" || activeRole === "HR";
     }
@@ -536,7 +587,8 @@ export default function App() {
     { id: "cleaning", label: "Housekeeping", icon: Sparkles },
     { id: "crm", label: "Sales & CRM", icon: Award },
     { id: "contracts", label: "Kontrak Digital", icon: FileCheck },
-    { id: "hris", label: "Human Resource", icon: Briefcase }
+    { id: "hris", label: "Human Resource", icon: Briefcase },
+    { id: "role-accounts", label: "Akses & Akun Role", icon: Lock }
   ];
 
   return (
@@ -572,44 +624,245 @@ export default function App() {
             </div>
 
             {/* Login control fields panel */}
-            <div className="md:w-1/2 bg-white flex flex-col justify-center p-8 md:p-14 space-y-6">
-              <div className="space-y-1.5">
-                <h2 className="text-2xl font-display font-extrabold text-slate-800">Masuk Aplikasi</h2>
-                <p className="text-xs text-slate-400 font-semibold">Silahkan pilih role cepat di bawah untuk kemudahan eksplorasi fitur</p>
+            <div className="md:w-1/2 bg-white flex flex-col justify-center p-8 md:p-14 space-y-6 overflow-y-auto max-h-screen">
+              <div className="space-y-1.5 text-left">
+                <h2 className="text-2xl font-display font-extrabold text-slate-800 tracking-tight">Portal Akses ERP</h2>
+                <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+                  Gunakan pilihan masuk instan cepat atau gunakan email & paspor kustom hasil pengaturan admin.
+                </p>
+              </div>
+              {/* Login Method Toggle Tabs */}
+              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/60 font-bold self-start text-[11px] mb-2 shadow-3xs">
+                <button
+                  type="button"
+                  onClick={() => setLoginSubTab("login")}
+                  className={`px-3.5 py-1.5 uppercase rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                    loginSubTab === "login"
+                      ? "bg-white text-emerald-800 shadow-xs font-black"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Lock className="h-3.5 w-3.5 text-emerald-600" />
+                  Masuk ERP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginSubTab("register");
+                    setRegSuccess(false);
+                  }}
+                  className={`px-3.5 py-1.5 uppercase rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                    loginSubTab === "register"
+                      ? "bg-white text-emerald-800 shadow-xs font-black"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <UserPlus className="h-3.5 w-3.5 text-emerald-600" />
+                  Daftar User Baru
+                </button>
               </div>
 
-              {/* Instant Switch Credentials Box */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-gray-150 space-y-3">
-                <span className="block text-[10px] text-gray-400 font-extrabold uppercase tracking-wide">Pilih Cepat Profil Akses:</span>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {(["Super Admin", "Owner", "Manager", "Receptionist", "Finance", "Marketing/Sales", "Staff Maintenance"] as UserRole[]).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => {
-                        setActiveRole(r);
-                        setIsLoggedIn(true);
-                        // Redirect to accessible menu depending on active role selection
-                        if (r === "Staff Maintenance") {
-                          setActiveTab("maintenance");
-                        } else if (r === "Finance") {
-                          setActiveTab("keuangan");
-                        } else {
-                          setActiveTab("dashboard");
-                        }
-                      }}
-                      className="px-3 py-2 bg-white border hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 hover:border-emerald-300 font-bold rounded-xl transition cursor-pointer text-left flex items-center justify-between"
+              {loginSubTab === "login" && (
+                /* MANUAL EMAIL AND PASSPORT FORM */
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const trimmedEmail = manualEmail.trim().toLowerCase();
+                    const matched = roleCredentials.find(
+                      (c) => c.email.trim().toLowerCase() === trimmedEmail && c.passport === manualPassport
+                    );
+                    if (matched) {
+                      setActiveRole(matched.role);
+                      setUserEmail(matched.email);
+                      setIsLoggedIn(true);
+                      if (matched.role === "Staff Maintenance") {
+                        setActiveTab("maintenance");
+                      } else if (matched.role === "Finance") {
+                        setActiveTab("keuangan");
+                      } else if (matched.role === "HR") {
+                        setActiveTab("hris");
+                      } else {
+                        setActiveTab("dashboard");
+                      }
+                      setManualEmail("");
+                      setManualPassport("");
+                      registerLog(`User ${matched.email} (${matched.role}) berhasil masuk ke sistem`, "Sistem");
+                    } else {
+                      alert("Gagal masuk. Email login atau paspor kunci Anda salah!");
+                    }
+                  }}
+                  className="space-y-4 animate-fade-in text-xs text-left"
+                >
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase text-gray-400 font-extrabold block">Email Kredensial:</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="email"
+                        required
+                        value={manualEmail}
+                        onChange={(e) => setManualEmail(e.target.value)}
+                        placeholder="contoh: admin@pms.pro"
+                        className="pl-9 pr-4 py-2.5 w-full border border-slate-205 focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded-xl font-bold text-slate-850 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase text-gray-400 font-extrabold block">Paspor Kunci (Sandi):</label>
+                    <div className="relative">
+                      <Key className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type={showPassportLogin ? "text" : "password"}
+                        required
+                        value={manualPassport}
+                        onChange={(e) => setManualPassport(e.target.value)}
+                        placeholder="Masukkan paspor kunci..."
+                        className="pl-9 pr-10 py-2.5 w-full border border-slate-205 focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded-xl font-bold text-slate-850 font-mono bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassportLogin(!showPassportLogin)}
+                        className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-650 p-1"
+                      >
+                        {showPassportLogin ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-wider rounded-xl transition shadow-md hover:shadow-lg active:scale-98 cursor-pointer"
+                  >
+                    Masuk Ke Sistem ERP
+                  </button>
+
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-[10px] text-slate-500 leading-relaxed font-semibold">
+                    <span className="font-extrabold text-slate-700 block mb-0.5">Petunjuk Akses:</span>
+                    Pastikan Anda telah mendaftarkan user baru di tab <strong className="text-emerald-700">Daftar User Baru</strong> dan mencatat kredensial sebelum login.
+                  </div>
+                </form>
+              )}
+
+              {loginSubTab === "register" && (
+                /* REGISTER NEW USER FORM */
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const trimmedEmail = regEmail.trim();
+                    if (!trimmedEmail || !regPassport.trim()) {
+                      alert("Tolong isi lengkap email dan paspor kunci baru!");
+                      return;
+                    }
+
+                    // Check if email already exists
+                    const exists = roleCredentials.some(
+                      (c) => c.email.trim().toLowerCase() === trimmedEmail.toLowerCase()
+                    );
+                    if (exists) {
+                      alert("Email ini sudah terdaftar di sistem! Tolong gunakan email lain.");
+                      return;
+                    }
+
+                    const newCred: RoleCredential = {
+                      role: regRole,
+                      email: trimmedEmail,
+                      passport: regPassport.trim()
+                    };
+
+                    const updated = [...roleCredentials, newCred];
+                    setRoleCredentials(updated);
+                    
+                    // Prepopulate manual login credentials
+                    setManualEmail(trimmedEmail);
+                    setManualPassport(regPassport.trim());
+                    
+                    setRegEmail("");
+                    setRegPassport("");
+                    setRegSuccess(true);
+                    
+                    registerLog(`User baru ${trimmedEmail} (${regRole}) berhasil didaftarkan`, "Sistem");
+                  }}
+                  className="space-y-4 animate-fade-in text-xs text-left"
+                >
+                  <div className="bg-emerald-50 text-emerald-800 p-3.5 rounded-xl border border-emerald-250 flex items-start gap-2.5 font-semibold">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-black block uppercase text-[9px] tracking-wide mb-0.5">Pendaftaran Akun Baru</span>
+                      Daftarkan akun kustom dengan level otoritas role spesifik ke dalam memory lokal sistem.
+                    </div>
+                  </div>
+
+                  {regSuccess && (
+                     <div className="p-3 bg-emerald-500 text-white rounded-xl font-bold uppercase tracking-wider text-[10px] text-center animate-bounce">
+                       🌟 Registrasi Sukses! Akun baru tersimpan. Silahkan klik tab "MASUK ERP".
+                     </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase text-gray-400 font-extrabold block">Pilih Hak Otoritas Role:</label>
+                    <select
+                      value={regRole}
+                      onChange={(e) => setRegRole(e.target.value as UserRole)}
+                      className="w-full px-3 py-2.5 border border-slate-205 focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded-xl font-extrabold text-slate-800 bg-white"
                     >
-                      <span>{r}</span>
-                      <ChevronRight className="h-3.5 w-3.5 opacity-50 text-emerald-600" />
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      <option value="Super Admin">Super Admin (Akses Mutlak)</option>
+                      <option value="Owner">Owner (Pemilik Properti/Kost)</option>
+                      <option value="Manager">Manager (Pengurus Harian)</option>
+                      <option value="Receptionist">Receptionist (Resepsionis)</option>
+                      <option value="HR">HR (Roster & Payroll)</option>
+                      <option value="Finance">Finance (Keuangan & Invoice)</option>
+                      <option value="Marketing/Sales">Marketing / Sales CRM</option>
+                      <option value="Staff Maintenance">Staff Maintenance (Teknisi)</option>
+                      <option value="Tenant/Penyewa">Tenant / Penyewa Kamar</option>
+                    </select>
+                  </div>
 
-              <div className="text-center">
-                <span className="text-xs text-slate-400">Atau masuk menggunakan ID developer terdaftar:</span>
-                <p className="text-xs font-mono font-bold text-slate-600 mt-1">sahrul.viona12@gmail.com</p>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase text-gray-400 font-extrabold block">Daftar Email User Baru:</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="email"
+                        required
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        placeholder="contoh: sahrul@pms.pro"
+                        className="pl-9 pr-4 py-2.5 w-full border border-slate-205 focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded-xl font-bold text-slate-850 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase text-gray-400 font-extrabold block">Tentukan Paspor Kunci (Sandi):</label>
+                    <div className="relative">
+                      <Key className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        value={regPassport}
+                        onChange={(e) => setRegPassport(e.target.value)}
+                        placeholder="contoh: pass123"
+                        className="pl-9 pr-4 py-2.5 w-full border border-slate-205 focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded-xl font-bold font-mono text-slate-850 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-slate-900 hover:bg-emerald-700 hover:text-white text-slate-100 font-black text-[11px] uppercase tracking-wider rounded-xl transition shadow active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Buat Akun & Masukkan Ke Daftar
+                  </button>
+                </form>
+              )}
+
+
+
+              <div className="text-center pt-2 border-t border-slate-105">
+                <span className="text-xs text-slate-400">ID Developer Aktif Terdaftar:</span>
+                <p className="text-xs font-mono font-bold text-slate-600 mt-0.5">sahrul.viona12@gmail.com</p>
               </div>
             </div>
           </motion.div>
@@ -901,6 +1154,30 @@ export default function App() {
                     onAddPayroll={handleAddPayroll}
                     onUpdateLeaveRequest={handleUpdateLeaveRequest}
                     onAddLeaveRequest={handleAddLeaveRequest}
+                  />
+                )}
+
+                {activeTab === "role-accounts" && isTabAvailable("role-accounts") && (
+                  <RoleAccountsModule
+                    credentials={roleCredentials}
+                    onUpdateCredentials={(updated) => setRoleCredentials(updated)}
+                    onResetToDefaults={() => setRoleCredentials(DEFAULT_ROLE_CREDENTIALS)}
+                    onQuickLogin={(role) => {
+                      const match = roleCredentials.find(c => c.role === role);
+                      setActiveRole(role);
+                      if (match) {
+                        setUserEmail(match.email);
+                      }
+                      setIsLoggedIn(true);
+                      if (role === "Staff Maintenance") {
+                        setActiveTab("maintenance");
+                      } else if (role === "Finance") {
+                        setActiveTab("keuangan");
+                      } else {
+                        setActiveTab("dashboard");
+                      }
+                      registerLog(`Beralih langsung ke interface: ${role}`, "Sistem");
+                    }}
                   />
                 )}
               </div>
