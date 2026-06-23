@@ -29,7 +29,8 @@ import {
   UserPlus,
   ShieldCheck,
   Trash2,
-  Plus
+  Plus,
+  Calendar
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -88,7 +89,8 @@ import MaintenanceModule from "./components/MaintenanceModule";
 import HousekeepingInventory from "./components/HousekeepingInventory";
 import CrmMarketing from "./components/CrmMarketing";
 import DigitalContract from "./components/DigitalContract";
-import WorkChatModule from "./components/WorkChatModule";
+import WorkChatModule, { ROLE_NAMES } from "./components/WorkChatModule";
+import CalendarRapatModule from "./components/CalendarRapatModule";
 import HRISModule from "./components/HRISModule";
 import RoleAccountsModule, { RoleCredential } from "./components/RoleAccountsModule";
 
@@ -600,7 +602,7 @@ export default function App() {
     if (tab === "hris") {
       return activeRole === "Super Admin" || activeRole === "HR";
     }
-    if (tab === "workchat") return true;
+    if (tab === "workchat" || tab === "calendar-rapat") return true;
     if (activeRole === "Super Admin" || activeRole === "Owner") return true;
 
     switch (activeRole) {
@@ -628,6 +630,7 @@ export default function App() {
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "supabase", label: "Supabase Cloud", icon: Database },
     { id: "workchat", label: "Chat Kerja", icon: MessageSquare },
+    { id: "calendar-rapat", label: "Kalender Rapat", icon: Calendar },
     { id: "properti", label: "Properti", icon: Building },
     { id: "kamar", label: "Kamar & Unit", icon: Home },
     { id: "booking", label: "Reservasi & Booking", icon: CalendarDays },
@@ -1059,6 +1062,16 @@ export default function App() {
                     onAddChatMessage={handleAddChatMessage}
                     onClearChats={handleClearChats}
                     supabaseLoading={supabaseLoading}
+                  />
+                )}
+
+                {activeTab === "calendar-rapat" && isTabAvailable("calendar-rapat") && (
+                  <CalendarRapatModule
+                    currentRole={activeRole}
+                    roleName={ROLE_NAMES[activeRole] || "Staff PMS"}
+                    onShowNotification={(title, desc) => {
+                      alert(`${title}: ${desc}`);
+                    }}
                   />
                 )}
 
