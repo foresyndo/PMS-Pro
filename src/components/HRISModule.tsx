@@ -33,7 +33,7 @@ import {
   Send,
   Eye
 } from "lucide-react";
-import { Employee, Attendance, Payroll, LeaveRequest, ShiftSchedule, ShiftType } from "../types";
+import { Employee, Attendance, Payroll, LeaveRequest, ShiftSchedule, ShiftType, UserRole } from "../types";
 
 interface HRISModuleProps {
   employees: Employee[];
@@ -41,6 +41,7 @@ interface HRISModuleProps {
   payroll: Payroll[];
   leaveRequests: LeaveRequest[];
   payrollEmails?: any[];
+  currentRole?: UserRole;
   onAddEmployee: (emp: Employee) => void;
   onUpdateEmployee: (emp: Employee) => void;
   onDeleteEmployee: (id: string) => void;
@@ -57,6 +58,7 @@ export default function HRISModule({
   payroll,
   leaveRequests,
   payrollEmails = [],
+  currentRole = "Super Admin",
   onAddEmployee,
   onUpdateEmployee,
   onDeleteEmployee,
@@ -172,6 +174,12 @@ export default function HRISModule({
   const [isScanningQR, setIsScanningQR] = useState(false);
   const [scanSuccessMessage, setScanSuccessMessage] = useState("");
   const [scanErrorMessage, setScanErrorMessage] = useState("");
+
+  // Monthly Report Modal State
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportSelectedMonth, setReportSelectedMonth] = useState("Juni 2026");
+  const [reportIncludeAttendance, setReportIncludeAttendance] = useState(true);
+  const [reportIncludePayroll, setReportIncludePayroll] = useState(true);
 
   const handleSimulateQRScan = () => {
     if (!scannedEmployeeId) {
@@ -698,6 +706,347 @@ export default function HRISModule({
     doc.save(`Slip_Gaji_${emp.name.replace(/\s+/g, "_")}_${pay.month.replace(/\s+/g, "_")}.pdf`);
   };
 
+  const uniqueMonths = Array.from(new Set([
+    ...payroll.map(p => p.month),
+    "Juni 2026",
+    "Juli 2026"
+  ])).sort();
+
+  const generateMonthlyReportPDF = (selectedMonth: string) => {
+    // 1. Parsing selected month to filter attendance
+    const [monthName, yearStr] = selectedMonth.split(" ");
+    const MONTH_MAP_INDONESIAN: Record<string, string> = {
+      "Januari": "01", "Februari": "02", "Maret": "03", "April": "04",
+      "Mei": "05", "Juni": "06", "Juli": "07", "Agustus": "08",
+      "September": "09", "Oktober": "10", "November": "11", "Desember": "12"
+    };
+    const monthCode = MONTH_MAP_INDONESIAN[monthName] || "06";
+    const datePrefix = `${yearStr || "2026"}-${monthCode}`;
+
+    const filteredAttendance = attendance.filter(a => a.date.startsWith(datePrefix));
+    const filteredPayroll = payroll.filter(p => p.month === selectedMonth);
+
+    // Compute stats
+    const totalExpected = filteredAttendance.length;
+    const totalActualPresent = filteredAttendance.filter(a => a.status === "Present" || a.status === "Late").length;
+    const avgAttendanceRate = totalExpected > 0 ? Math.round((totalActualPresent / totalExpected) * 100) : 100;
+
+    const totalGross = filteredPayroll.reduce((sum, p) => sum + p.basicSalary + p.allowance, 0);
+    const totalPaid = filteredPayroll.filter(p => p.status === "Paid").reduce((sum, p) => sum + p.netSalary, 0);
+    const totalPending = filteredPayroll.filter(p => p.status === "Pending").reduce((sum, p) => sum + p.netSalary, 0);
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    // Helper to draw border & page styling
+    const drawPageDecorations = (pageNumber: number) => {
+      // Background card
+      doc.setFillColor(255, 255, 255);
+      doc.rect(10, 10, 190, 277, "F");
+      
+      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.setLineWidth(0.5);
+      doc.rect(10, 10, 190, 277, "S");
+
+      // Top Emerald Accent Bar
+      doc.setFillColor(5, 150, 105); // emerald-600
+      doc.rect(10, 10, 190, 4, "F");
+      
+      // Footer page metadata
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text(`PMS PRO PROPERTIES | Laporan SDM Bulanan`, 15, 280);
+      doc.text(`Halaman ${pageNumber}`, 180, 280);
+      
+      doc.setDrawColor(241, 245, 249);
+      doc.setLineWidth(0.3);
+      doc.line(10, 275, 200, 275);
+    };
+
+    drawPageDecorations(1);
+
+    // 2. HEADER BLOCK
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text("PMS PRO PROPERTIES", 15, 25);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 116, 139); // slate-500
+    doc.text("Gedung Utama PMS Pro, Lt. 3 | Jakarta, Indonesia | hrd@pmsproproperties.co.id", 15, 30);
+    
+    // Document Label
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(5, 150, 105); // emerald-600
+    doc.text("LAPORAN REKAPITULASI SDM & PAYROLL", 15, 39);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Periode Laporan  : ${selectedMonth}`, 15, 45);
+    doc.text(`Tanggal Cetak     : ${new Date().toLocaleDateString("id-ID")}`, 15, 50);
+    doc.text(`Dicetak Oleh        : Admin HRD / Super Admin`, 15, 55);
+
+    // Divider
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(15, 59, 195, 59);
+
+    let currentY = 65;
+
+    // 3. SECTION 1: RINGKASAN EKSEKUTIF
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text("I. RINGKASAN EKSEKUTIF (EXECUTIVE SUMMARY)", 15, currentY);
+    currentY += 4;
+    
+    // Draw background card
+    doc.setFillColor(248, 250, 252); // grey-50
+    doc.rect(15, currentY, 180, 38, "F");
+    doc.setDrawColor(241, 245, 249);
+    doc.rect(15, currentY, 180, 38, "S");
+    
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 116, 139);
+    
+    // Col 1: Kepegawaian & Presensi
+    doc.setFont("helvetica", "bold");
+    doc.text("A. MONITOR KEHADIRAN & SDM", 20, currentY + 7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85);
+    doc.text(`- Total Staf Terdaftar : ${employees.length} Orang`, 20, currentY + 13);
+    doc.text(`- Total Log Presensi   : ${filteredAttendance.length} Entri`, 20, currentY + 19);
+    doc.text(`- Rata-rata Hadir       : ${avgAttendanceRate}%`, 20, currentY + 25);
+    doc.text(`- Rincian Presensi     : ${filteredAttendance.filter(a => a.status === "Present").length} Tepat, ${filteredAttendance.filter(a => a.status === "Late").length} Lambat`, 20, currentY + 31);
+
+    // Col 2: Payroll Keuangan
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(100, 116, 139);
+    doc.text("B. REKAPITULASI BIAYA PAYROLL", 110, currentY + 7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85);
+    doc.text(`- Pengeluaran Kotor : Rp ${totalGross.toLocaleString("id-ID")}`, 110, currentY + 13);
+    doc.text(`- Sudah Terbayar     : Rp ${totalPaid.toLocaleString("id-ID")}`, 110, currentY + 19);
+    doc.text(`- Sisa Antrean Gaji : Rp ${totalPending.toLocaleString("id-ID")}`, 110, currentY + 25);
+    doc.text(`- Total Slip Gaji       : ${filteredPayroll.length} Slip diterbitkan`, 110, currentY + 31);
+
+    currentY += 46;
+
+    // 4. SECTION 2: REKAPITULASI ABSENSI STAF
+    if (reportIncludeAttendance) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text("II. DETAIL REKAPITULASI PRESENSI KARYAWAN", 15, currentY);
+      currentY += 4;
+
+      // Table Header
+      doc.setFillColor(5, 150, 105); // emerald-600
+      doc.rect(15, currentY, 180, 7, "F");
+      
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 255, 255);
+      doc.text("Nama Staf", 18, currentY + 5);
+      doc.text("Jabatan & Dept", 52, currentY + 5);
+      doc.text("Hadir", 95, currentY + 5);
+      doc.text("Terlambat", 115, currentY + 5);
+      doc.text("Absen", 140, currentY + 5);
+      doc.text("Cuti/Izin", 160, currentY + 5);
+      doc.text("Rasio", 182, currentY + 5);
+      
+      currentY += 7;
+
+      const employeeMetrics = employees.map(emp => {
+        const empAttendance = filteredAttendance.filter(a => a.employeeId === emp.id);
+        const present = empAttendance.filter(a => a.status === "Present").length;
+        const late = empAttendance.filter(a => a.status === "Late").length;
+        const absent = empAttendance.filter(a => a.status === "Absent").length;
+        const leave = empAttendance.filter(a => a.status === "Leave").length;
+        const total = empAttendance.length;
+        const rate = total > 0 ? Math.round(((present + late) / total) * 100) : 100;
+        return { emp, present, late, absent, leave, rate };
+      });
+
+      employeeMetrics.forEach((m, idx) => {
+        if (idx % 2 === 0) {
+          doc.setFillColor(248, 250, 252);
+        } else {
+          doc.setFillColor(255, 255, 255);
+        }
+        doc.rect(15, currentY, 180, 8, "F");
+        
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(51, 65, 85);
+        doc.text(m.emp.name.slice(0, 20), 18, currentY + 5.5);
+        doc.text(`${m.emp.role.slice(0, 15)} (${m.emp.department.slice(0, 4).toUpperCase()})`, 52, currentY + 5.5);
+        doc.text(`${m.present} Hari`, 95, currentY + 5.5);
+        doc.text(`${m.late} Hari`, 115, currentY + 5.5);
+        doc.text(`${m.absent} Hari`, 140, currentY + 5.5);
+        doc.text(`${m.leave} Hari`, 160, currentY + 5.5);
+        doc.text(`${m.rate}%`, 182, currentY + 5.5);
+        
+        currentY += 8;
+
+        if (currentY > 260) {
+          doc.addPage();
+          drawPageDecorations(doc.getNumberOfPages());
+          currentY = 25;
+          
+          doc.setFillColor(5, 150, 105);
+          doc.rect(15, currentY, 180, 7, "F");
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(255, 255, 255);
+          doc.text("Nama Staf", 18, currentY + 5);
+          doc.text("Jabatan & Dept", 52, currentY + 5);
+          doc.text("Hadir", 95, currentY + 5);
+          doc.text("Terlambat", 115, currentY + 5);
+          doc.text("Absen", 140, currentY + 5);
+          doc.text("Cuti/Izin", 160, currentY + 5);
+          doc.text("Rasio", 182, currentY + 5);
+          currentY += 7;
+        }
+      });
+      currentY += 8;
+    }
+
+    // 5. SECTION 3: REKAPITULASI PAYROLL BULANAN
+    if (reportIncludePayroll) {
+      if (currentY > 235) {
+        doc.addPage();
+        drawPageDecorations(doc.getNumberOfPages());
+        currentY = 25;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text("III. RINCIAN BIAYA & DAFTAR PAYROLL STAF", 15, currentY);
+      currentY += 4;
+
+      // Table Header
+      doc.setFillColor(15, 118, 110); // teal-700
+      doc.rect(15, currentY, 180, 7, "F");
+      
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 255, 255);
+      doc.text("Nama Staf", 18, currentY + 5);
+      doc.text("Gaji Pokok Utama", 55, currentY + 5);
+      doc.text("Tunjangan (+)", 90, currentY + 5);
+      doc.text("Potongan (-)", 122, currentY + 5);
+      doc.text("Gaji Bersih (Nett)", 150, currentY + 5);
+      doc.text("Status", 180, currentY + 5);
+      
+      currentY += 7;
+
+      if (filteredPayroll.length === 0) {
+        doc.setFillColor(255, 255, 255);
+        doc.rect(15, currentY, 180, 10, "F");
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(148, 163, 184);
+        doc.text("Belum ada data slip payroll yang diterbitkan untuk periode ini.", 20, currentY + 6.5);
+        currentY += 10;
+      } else {
+        filteredPayroll.forEach((pay, idx) => {
+          if (idx % 2 === 0) {
+            doc.setFillColor(248, 250, 252);
+          } else {
+            doc.setFillColor(255, 255, 255);
+          }
+          doc.rect(15, currentY, 180, 8, "F");
+          
+          doc.setFontSize(7.5);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(51, 65, 85);
+          doc.text(getEmployeeName(pay.employeeId).slice(0, 20), 18, currentY + 5.5);
+          doc.text(`Rp ${pay.basicSalary.toLocaleString("id-ID")}`, 55, currentY + 5.5);
+          doc.text(`Rp ${pay.allowance.toLocaleString("id-ID")}`, 90, currentY + 5.5);
+          doc.text(`Rp ${pay.deductions.toLocaleString("id-ID")}`, 122, currentY + 5.5);
+          
+          doc.setFont("helvetica", "bold");
+          doc.text(`Rp ${pay.netSalary.toLocaleString("id-ID")}`, 150, currentY + 5.5);
+          
+          doc.setFontSize(7);
+          doc.setTextColor(pay.status === "Paid" ? 16 : 245, pay.status === "Paid" ? 185 : 158, pay.status === "Paid" ? 129 : 11);
+          doc.text(pay.status === "Paid" ? "LUNAS" : "PENDING", 180, currentY + 5.5);
+          
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(51, 65, 85);
+          currentY += 8;
+
+          if (currentY > 260) {
+            doc.addPage();
+            drawPageDecorations(doc.getNumberOfPages());
+            currentY = 25;
+            
+            doc.setFillColor(15, 118, 110);
+            doc.rect(15, currentY, 180, 7, "F");
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(255, 255, 255);
+            doc.text("Nama Staf", 18, currentY + 5);
+            doc.text("Gaji Pokok Utama", 55, currentY + 5);
+            doc.text("Tunjangan (+)", 90, currentY + 5);
+            doc.text("Potongan (-)", 122, currentY + 5);
+            doc.text("Gaji Bersih (Nett)", 150, currentY + 5);
+            doc.text("Status", 180, currentY + 5);
+            currentY += 7;
+          }
+        });
+      }
+      currentY += 8;
+    }
+
+    // 6. SIGN-OFF / PENGESAHAN
+    if (currentY > 230) {
+      doc.addPage();
+      drawPageDecorations(doc.getNumberOfPages());
+      currentY = 25;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text("PENGESAHAN DOKUMEN REKAPITULASI,", 15, currentY + 10);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Disiapkan oleh:", 15, currentY + 16);
+    doc.text("Disetujui & Sahkan oleh:", 110, currentY + 16);
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Otorisasi HRD Digital", 15, currentY + 28);
+    doc.text("Otorisasi Management Digital", 110, currentY + 28);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text("Ismail Marzuki", 15, currentY + 36);
+    doc.text("Hary Tanoe", 110, currentY + 36);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("HR & Operations Specialist", 15, currentY + 40);
+    doc.text("Super Admin / VP Operations", 110, currentY + 40);
+
+    doc.save(`Laporan_HR_Rekap_${selectedMonth.replace(/\s+/g, "_")}.pdf`);
+  };
+
   const filteredEmployees = employees.filter((emp) => {
     const searchString = employeeSearch.toLowerCase();
     return (
@@ -726,6 +1075,14 @@ export default function HRISModule({
           </div>
           
           <div className="flex gap-2">
+            {(currentRole === "HR" || currentRole === "Super Admin") && (
+              <button
+                onClick={() => setIsReportModalOpen(true)}
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition border border-emerald-200 shrink-0"
+              >
+                <Download className="h-4 w-4" /> Unduh Laporan
+              </button>
+            )}
             <button
               onClick={openAddEmployee}
               className="bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition shrink-0"
@@ -2845,6 +3202,109 @@ export default function HRISModule({
                 Kembali ke Portal HRIS
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------
+          MODAL 6: REPORT DOWNLOAD OPTIONS
+          ------------------------------------- */}
+      {isReportModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+            <div className="bg-gradient-to-r from-emerald-800 to-teal-700 text-white p-6 text-left relative">
+              <h3 className="text-lg font-bold">Generate Laporan Rekapitulasi SDM & Payroll</h3>
+              <p className="text-xs text-emerald-100 mt-1">
+                Pilih periode bulanan dan bagian laporan yang ingin di-generate ke dalam file PDF profesional.
+              </p>
+              <button
+                onClick={() => setIsReportModalOpen(false)}
+                className="absolute top-4 right-4 text-white hover:text-emerald-200 text-xl font-bold transition focus:outline-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                generateMonthlyReportPDF(reportSelectedMonth);
+                setIsReportModalOpen(false);
+              }}
+              className="p-6 space-y-4 text-left"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                  Pilih Periode Laporan Bulanan
+                </label>
+                <select
+                  value={reportSelectedMonth}
+                  onChange={(e) => setReportSelectedMonth(e.target.value)}
+                  className="w-full text-xs bg-slate-50 border border-gray-200 rounded-xl p-3 text-slate-700 outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                >
+                  {uniqueMonths.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase">
+                  Bagian Laporan yang Disertakan
+                </label>
+                
+                <label className="flex items-center gap-3 bg-slate-50 border border-gray-150 p-3 rounded-xl cursor-pointer hover:bg-slate-100 transition">
+                  <input
+                    type="checkbox"
+                    checked={reportIncludeAttendance}
+                    onChange={(e) => setReportIncludeAttendance(e.target.checked)}
+                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Rekapitulasi Absensi Bulanan</span>
+                    <span className="text-[10px] text-slate-500 block">Daftar rasio kehadiran, jumlah terlambat, mangkir, dan cuti karyawan.</span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 bg-slate-50 border border-gray-150 p-3 rounded-xl cursor-pointer hover:bg-slate-100 transition">
+                  <input
+                    type="checkbox"
+                    checked={reportIncludePayroll}
+                    onChange={(e) => setReportIncludePayroll(e.target.checked)}
+                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Rincian Slip Payroll & Gaji Bersih</span>
+                    <span className="text-[10px] text-slate-500 block">Daftar gaji pokok, tunjangan, potongan absensi, dan total gaji bersih karyawan.</span>
+                  </div>
+                </label>
+              </div>
+
+              {!reportIncludeAttendance && !reportIncludePayroll && (
+                <p className="text-[10px] text-rose-500 font-bold bg-rose-50 p-2 rounded-lg">
+                  * Peringatan: Anda harus memilih setidaknya satu bagian laporan untuk disertakan.
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 border rounded-xl font-bold text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={!reportIncludeAttendance && !reportIncludePayroll}
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow flex items-center gap-1.5 text-xs"
+                >
+                  <Download className="h-4 w-4" /> Unduh Laporan PDF
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

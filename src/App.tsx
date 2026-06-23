@@ -1178,6 +1178,7 @@ export default function App() {
                     payroll={payroll}
                     leaveRequests={leaveRequests}
                     payrollEmails={payrollEmails}
+                    currentRole={activeRole}
                     onAddEmployee={handleAddEmployee}
                     onUpdateEmployee={handleUpdateEmployee}
                     onDeleteEmployee={handleDeleteEmployee}
