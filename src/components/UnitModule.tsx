@@ -14,7 +14,8 @@ import {
   QrCode,
   Copy,
   ExternalLink,
-  X
+  X,
+  Upload
 } from "lucide-react";
 import { Unit, Property, UnitStatus } from "../types";
 
@@ -57,6 +58,7 @@ export default function UnitModule({
   const [status, setStatus] = useState<UnitStatus>("Available");
   const [facilitiesString, setFacilitiesString] = useState("Wi-Fi, AC, Kamar Mandi Dalam, Kasur Springbed");
   const [imageUrl, setImageUrl] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const resetForm = () => {
     setPropertyId(properties[0]?.id || "");
@@ -322,15 +324,115 @@ export default function UnitModule({
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-600">Foto Kamar (URL)</label>
-              <input
-                type="text"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://images.unsplash..."
-                className="w-full text-slate-800 p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 text-sm"
-              />
+            <div className="space-y-1 text-left">
+              <label className="text-xs font-bold text-gray-600 flex justify-between items-center">
+                <span>Foto Kamar (Upload / Tarik file)</span>
+                {imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl("")}
+                    className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer"
+                  >
+                    Hapus Foto
+                  </button>
+                )}
+              </label>
+              
+              {imageUrl ? (
+                <div className="relative mt-1.5 rounded-xl overflow-hidden border border-gray-200 bg-gray-50 h-40 flex items-center justify-center">
+                  <img
+                    src={imageUrl}
+                    alt="Review foto kamar"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl("")}
+                    className="absolute top-2.5 right-2.5 p-1.5 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full transition cursor-pointer"
+                    title="Hapus Foto"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="absolute bottom-2 left-2 right-2 bg-slate-900/70 backdrop-blur-xs py-1 px-2.5 text-[10px] text-white rounded-lg truncate text-center font-sans">
+                    Foto Terunggah (Base64 atau URL website)
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragOver(true);
+                  }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragOver(false);
+                    const files = e.dataTransfer.files;
+                    if (files && files[0]) {
+                      const file = files[0];
+                      if (!file.type.startsWith("image/")) {
+                        alert("Mohon masukkan tipe file gambar (.png, .jpg, .jpeg, etc)!");
+                        return;
+                      }
+                      if (file.size > 3 * 1024 * 1024) {
+                        alert("Ukuran gambar melebihi limit 3MB!");
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setImageUrl(reader.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className={`mt-1 border-2 border-dashed rounded-xl p-6 transition flex flex-col items-center justify-center gap-1 text-center cursor-pointer ${
+                    isDragOver
+                      ? "border-emerald-500 bg-emerald-50/50"
+                      : "border-gray-200 hover:border-emerald-500 hover:bg-emerald-50/5"
+                  }`}
+                  onClick={() => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = "image/*";
+                    input.onchange = (e) => {
+                      const target = e.target as HTMLInputElement;
+                      const files = target.files;
+                      if (files && files[0]) {
+                        const file = files[0];
+                        if (file.size > 3 * 1024 * 1024) {
+                          alert("Ukuran gambar melebihi limit 3MB!");
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setImageUrl(reader.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    };
+                    input.click();
+                  }}
+                >
+                  <Upload className="h-6 w-6 text-slate-400" />
+                  <div className="font-bold text-slate-700 text-xs mt-1 font-sans">
+                    Tarik & Lepas gambar di sini, atau <span className="text-emerald-600 underline cursor-pointer">Pilih File</span>
+                  </div>
+                  <span className="text-[10px] text-gray-400 font-medium font-sans">Format PNG, JPG, GIF hingga 3 MB</span>
+                </div>
+              )}
+              
+              {/* Fallback Input URL */}
+              <div className="pt-2">
+                <span className="text-[9px] text-gray-400 font-bold block uppercase font-sans">Atau masukkan URL Foto Manual (Alternatif)</span>
+                <input
+                  type="text"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full text-slate-800 p-2 mt-1 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 text-[11px]"
+                />
+              </div>
             </div>
 
             <div className="pt-2 flex justify-end gap-2">
