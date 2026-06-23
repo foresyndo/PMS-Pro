@@ -33,10 +33,30 @@ import {
   INITIAL_INVOICES,
   INITIAL_EXPENSES,
   INITIAL_MAINTENANCE,
-  INITIAL_CHAT_MESSAGES
+  INITIAL_CHAT_MESSAGES,
+  INITIAL_EMPLOYEES,
+  INITIAL_ATTENDANCE,
+  INITIAL_PAYROLL,
+  INITIAL_LEAVE_REQUESTS
 } from "./data";
 
-import { Property, Unit, Tenant, Reservation, Contract, Invoice, Expense, MaintenanceTicket, UserRole, PaymentLog, WorkChatMessage } from "./types";
+import {
+  Property,
+  Unit,
+  Tenant,
+  Reservation,
+  Contract,
+  Invoice,
+  Expense,
+  MaintenanceTicket,
+  UserRole,
+  PaymentLog,
+  WorkChatMessage,
+  Employee,
+  Attendance,
+  Payroll,
+  LeaveRequest
+} from "./types";
 
 import SupabaseModule from "./components/SupabaseModule";
 import {
@@ -60,6 +80,7 @@ import HousekeepingInventory from "./components/HousekeepingInventory";
 import CrmMarketing from "./components/CrmMarketing";
 import DigitalContract from "./components/DigitalContract";
 import WorkChatModule from "./components/WorkChatModule";
+import HRISModule from "./components/HRISModule";
 
 export default function App() {
   // Session states
@@ -219,6 +240,58 @@ export default function App() {
   const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
   const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
   const [maintenance, setMaintenance] = useState<MaintenanceTicket[]>(INITIAL_MAINTENANCE);
+  
+  // HRIS State lists
+  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
+  const [attendance, setAttendance] = useState<Attendance[]>(INITIAL_ATTENDANCE);
+  const [payroll, setPayroll] = useState<Payroll[]>(INITIAL_PAYROLL);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(INITIAL_LEAVE_REQUESTS);
+
+  const handleAddEmployee = (emp: Employee) => {
+    setEmployees([emp, ...employees]);
+    registerLog(`Menambahkan karyawan baru: "${emp.name}" (${emp.role})`, "Sistem");
+  };
+
+  const handleUpdateEmployee = (emp: Employee) => {
+    setEmployees(employees.map(e => e.id === emp.id ? emp : e));
+    registerLog(`Memperbarui data profil karyawan "${emp.name}"`, "Sistem");
+  };
+
+  const handleDeleteEmployee = (id: string) => {
+    const emp = employees.find(e => e.id === id);
+    setEmployees(employees.filter(e => e.id !== id));
+    if (emp) registerLog(`Menghapus data karyawan "${emp.name}" dari sistem`, "Sistem");
+  };
+
+  const handleAddAttendance = (att: Attendance) => {
+    setAttendance([att, ...attendance]);
+    const empName = employees.find(e => e.id === att.employeeId)?.name || att.employeeId;
+    registerLog(`Pencatatan kehadiran manual untuk: "${empName}" status: ${att.status}`, "Sistem");
+  };
+
+  const handleAddPayroll = (pay: Payroll) => {
+    setPayroll([pay, ...payroll]);
+    const empName = employees.find(e => e.id === pay.employeeId)?.name || pay.employeeId;
+    registerLog(`Slip pembayaran gaji bulan ${pay.month} berhasil diterbitkan: "${empName}"`, "Sistem");
+  };
+
+  const handleUpdatePayroll = (pay: Payroll) => {
+    setPayroll(payroll.map(p => p.id === pay.id ? pay : p));
+    const empName = employees.find(e => e.id === pay.employeeId)?.name || pay.employeeId;
+    registerLog(`Gaji bersih terbayar lunas kepada staf: "${empName}"`, "Sistem");
+  };
+
+  const handleAddLeaveRequest = (leave: LeaveRequest) => {
+    setLeaveRequests([leave, ...leaveRequests]);
+    const empName = employees.find(e => e.id === leave.employeeId)?.name || leave.employeeId;
+    registerLog(`Staf "${empName}" mengajukan cuti baru`, "Sistem");
+  };
+
+  const handleUpdateLeaveRequest = (leave: LeaveRequest) => {
+    setLeaveRequests(leaveRequests.map(l => l.id === leave.id ? leave : l));
+    const empName = employees.find(e => e.id === leave.employeeId)?.name || leave.employeeId;
+    registerLog(`Persetujuan cuti "${empName}" diubah: ${leave.status}`, "Sistem");
+  };
   const [activities, setActivities] = useState<any[]>([
     { id: "1", timestamp: "14:20:11", title: "Sistem PMS Pro Aktif & Tersinkronisasi", category: "Sistem", operator: "System" }
   ]);
@@ -423,10 +496,15 @@ export default function App() {
 
   // Multi-role access control check helper
   const isTabAvailable = (tab: string) => {
+    if (tab === "hris") {
+      return activeRole === "Super Admin" || activeRole === "HR";
+    }
     if (tab === "workchat") return true;
     if (activeRole === "Super Admin" || activeRole === "Owner") return true;
 
     switch (activeRole) {
+      case "HR":
+        return ["dashboard", "hris"].includes(tab);
       case "Manager":
         return ["dashboard", "properti", "kamar", "booking", "tenant", "maintenance", "cleaning"].includes(tab);
       case "Receptionist":
@@ -457,7 +535,8 @@ export default function App() {
     { id: "maintenance", label: "Perbaikan", icon: Wrench },
     { id: "cleaning", label: "Housekeeping", icon: Sparkles },
     { id: "crm", label: "Sales & CRM", icon: Award },
-    { id: "contracts", label: "Kontrak Digital", icon: FileCheck }
+    { id: "contracts", label: "Kontrak Digital", icon: FileCheck },
+    { id: "hris", label: "Human Resource", icon: Briefcase }
   ];
 
   return (
@@ -649,6 +728,8 @@ export default function App() {
                           setActiveTab("maintenance");
                         } else if (nextRole === "Finance") {
                           setActiveTab("keuangan");
+                        } else if (nextRole === "HR") {
+                          setActiveTab("hris");
                         } else {
                           setActiveTab("dashboard");
                         }
@@ -658,6 +739,7 @@ export default function App() {
                     >
                       <option value="Super Admin">Super Admin</option>
                       <option value="Owner">Owner (Pemilik)</option>
+                      <option value="HR">Human Resource (HR)</option>
                       <option value="Manager">Manager</option>
                       <option value="Receptionist">Receptionist</option>
                       <option value="Finance">Finance Acc</option>
@@ -758,10 +840,14 @@ export default function App() {
                     tenants={tenants}
                     properties={properties}
                     units={units}
+                    maintenance={maintenance}
+                    payroll={payroll}
+                    employees={employees}
                     onAddInvoice={handleAddInvoice}
                     onAddPayment={handleAddPayment}
                     onAddExpense={handleAddExpense}
                     onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
+                    onUpdatePayroll={handleUpdatePayroll}
                     prefilledUnitId={prefilledUnitId}
                     onClearPrefill={() => setPrefilledUnitId(null)}
                   />
@@ -798,6 +884,23 @@ export default function App() {
                     units={units}
                     properties={properties}
                     onAddContract={handleAddContract}
+                  />
+                )}
+
+                {activeTab === "hris" && isTabAvailable("hris") && (
+                  <HRISModule
+                    employees={employees}
+                    attendance={attendance}
+                    payroll={payroll}
+                    leaveRequests={leaveRequests}
+                    onAddEmployee={handleAddEmployee}
+                    onUpdateEmployee={handleUpdateEmployee}
+                    onDeleteEmployee={handleDeleteEmployee}
+                    onAddAttendance={handleAddAttendance}
+                    onUpdatePayroll={handleUpdatePayroll}
+                    onAddPayroll={handleAddPayroll}
+                    onUpdateLeaveRequest={handleUpdateLeaveRequest}
+                    onAddLeaveRequest={handleAddLeaveRequest}
                   />
                 )}
               </div>

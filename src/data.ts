@@ -702,3 +702,173 @@ export const INITIAL_CHAT_MESSAGES = [
   }
 ];
 
+export const INITIAL_EMPLOYEES = [
+  {
+    id: "emp-1",
+    name: "Dewi Lestari",
+    email: "dewi.lestari@pmspro.com",
+    phone: "081234567890",
+    role: "General Manager",
+    department: "Operations",
+    status: "Active" as const,
+    joinedDate: "2024-01-15",
+    salary: 9500000
+  },
+  {
+    id: "emp-2",
+    name: "Budi Santoso",
+    email: "budi.santoso@pmspro.com",
+    phone: "081234567891",
+    role: "Finance Officer",
+    department: "Finance",
+    status: "Active" as const,
+    joinedDate: "2024-03-01",
+    salary: 7500000
+  },
+  {
+    id: "emp-3",
+    name: "Agus Riyadi",
+    email: "agus.riyadi@pmspro.com",
+    phone: "081234567892",
+    role: "Head of Maintenance",
+    department: "Maintenance",
+    status: "Active" as const,
+    joinedDate: "2024-02-10",
+    salary: 6200000
+  },
+  {
+    id: "emp-4",
+    name: "Anton Hartono",
+    email: "anton.hartono@pmspro.com",
+    phone: "081234567893",
+    role: "Receptionist & Front Office",
+    department: "Front Office",
+    status: "Active" as const,
+    joinedDate: "2025-05-20",
+    salary: 4700000
+  },
+  {
+    id: "emp-5",
+    name: "Siti Rahma",
+    email: "siti.rahma@pmspro.com",
+    phone: "081234567894",
+    role: "HR Representative",
+    department: "Human Resources",
+    status: "Active" as const,
+    joinedDate: "2025-08-01",
+    salary: 6800000
+  }
+];
+
+export const INITIAL_ATTENDANCE = [
+  {
+    id: "att-1",
+    employeeId: "emp-1",
+    date: "2026-06-22",
+    checkIn: "08:02",
+    checkOut: "17:05",
+    status: "Present" as const
+  },
+  {
+    id: "att-2",
+    employeeId: "emp-2",
+    date: "2026-06-22",
+    checkIn: "07:55",
+    checkOut: "17:01",
+    status: "Present" as const
+  },
+  {
+    id: "att-3",
+    employeeId: "emp-3",
+    date: "2026-06-22",
+    checkIn: "08:15",
+    checkOut: "17:10",
+    status: "Late" as const
+  },
+  {
+    id: "att-4",
+    employeeId: "emp-4",
+    date: "2026-06-22",
+    checkIn: "07:45",
+    checkOut: "17:00",
+    status: "Present" as const
+  },
+  {
+    id: "att-5",
+    employeeId: "emp-5",
+    date: "2026-06-22",
+    checkIn: "08:00",
+    checkOut: "17:02",
+    status: "Present" as const
+  }
+];
+
+export const INITIAL_PAYROLL = [
+  {
+    id: "pay-1",
+    employeeId: "emp-1",
+    month: "Juni 2026",
+    basicSalary: 9500000,
+    allowance: 1200000,
+    deductions: 250000,
+    netSalary: 10450000,
+    status: "Paid" as const,
+    paymentDate: "2026-06-15"
+  },
+  {
+    id: "pay-2",
+    employeeId: "emp-2",
+    month: "Juni 2026",
+    basicSalary: 7500000,
+    allowance: 800000,
+    deductions: 150000,
+    netSalary: 8150000,
+    status: "Paid" as const,
+    paymentDate: "2026-06-15"
+  },
+  {
+    id: "pay-3",
+    employeeId: "emp-3",
+    month: "Juni 2026",
+    basicSalary: 6200000,
+    allowance: 500000,
+    deductions: 100000,
+    netSalary: 6600000,
+    status: "Pending" as const
+  },
+  {
+    id: "pay-4",
+    employeeId: "emp-4",
+    month: "Juni 2026",
+    basicSalary: 4700000,
+    allowance: 300000,
+    deductions: 50000,
+    netSalary: 4950000,
+    status: "Pending" as const
+  }
+];
+
+export const INITIAL_LEAVE_REQUESTS = [
+  {
+    id: "leave-1",
+    employeeId: "emp-3",
+    leaveType: "Sick" as const,
+    startDate: "2026-06-10",
+    endDate: "2026-06-11",
+    reason: "Sakit demam berdarah dan perlu rawat jalan",
+    status: "Approved" as const,
+    createdAt: "2026-06-09T08:00:00Z"
+  },
+  {
+    id: "leave-2",
+    employeeId: "emp-4",
+    leaveType: "Annual" as const,
+    startDate: "2026-06-28",
+    endDate: "2026-06-30",
+    reason: "Acara keluarga di luar kota Jawa Tengah",
+    status: "Pending" as const,
+    createdAt: "2026-06-20T10:30:00Z"
+  }
+];
+
+

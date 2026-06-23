@@ -11,6 +11,16 @@ import {
   Sparkles,
   ClipboardList
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  CartesianGrid
+} from "recharts";
 import { MaintenanceTicket, Property, Unit, MaintenanceStatus, MaintenancePriority } from "../types";
 
 interface MaintenanceModuleProps {
@@ -94,6 +104,23 @@ export default function MaintenanceModule({
     }).format(num);
   };
 
+  const openTickets = maintenance.filter(t => t.status === "Open");
+  const processTickets = maintenance.filter(t => t.status === "Process");
+  const completedTickets = maintenance.filter(t => t.status === "Completed");
+
+  const totalCount = maintenance.length;
+  const openCount = openTickets.length;
+  const processCount = processTickets.length;
+  const completedCount = completedTickets.length;
+
+  const totalPendingCost = [...openTickets, ...processTickets].reduce((acc, curr) => acc + (curr.cost || 0), 0);
+
+  const chartData = [
+    { name: "Open", count: openCount, color: "#f43f5e" },
+    { name: "Process", count: processCount, color: "#fbbf24" },
+    { name: "Completed", count: completedCount, color: "#10b981" }
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -109,6 +136,103 @@ export default function MaintenanceModule({
           <Plus className="h-4 w-4" />
           Log Kerusakan Baru
         </button>
+      </div>
+
+      {/* MINI ANALYTICS WIDGET FOR TICKETS BY STATUS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans">
+        {/* Metric Summary Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <ClipboardList className="h-4 w-4 text-emerald-600" />
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ringkasan Beban Kerja</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[10px] text-gray-400 font-bold block leading-none uppercase">Total Tiket</span>
+                <span className="text-xl font-extrabold text-slate-800 mt-1 block">{totalCount}</span>
+              </div>
+              <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl">
+                <span className="text-[10px] text-rose-500 font-bold block leading-none uppercase">Open</span>
+                <span className="text-xl font-extrabold text-rose-700 mt-1 block">{openCount}</span>
+              </div>
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                <span className="text-[10px] text-amber-500 font-bold block leading-none uppercase">Process</span>
+                <span className="text-xl font-extrabold text-amber-700 mt-1 block">{processCount}</span>
+              </div>
+              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                <span className="text-[10px] text-emerald-500 font-bold block leading-none uppercase">Completed</span>
+                <span className="text-xl font-extrabold text-emerald-700 mt-1 block">{completedCount}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="pt-2 border-t border-gray-100 text-xs text-gray-500 flex justify-between items-center bg-slate-50/50 p-2 rounded-xl">
+            <span className="flex items-center gap-1.5 font-semibold text-slate-500">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+              Biaya Pending:
+            </span>
+            <strong className="text-slate-800 font-bold text-[13px]">{formatIDR(totalPendingCost)}</strong>
+          </div>
+        </div>
+
+        {/* Recharts Bar Chart showing workload distribution */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-sm lg:col-span-2 flex flex-col justify-between">
+          <div className="flex justify-between items-center mb-1">
+            <div>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Sebaran Status Laporan</h3>
+              <p className="text-[11px] text-gray-400 font-normal mt-0.5">Grafik perbandingan status denda/perbaikan (Open, Process, Completed)</p>
+            </div>
+            <div className="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 p-1 px-2.5 rounded-lg font-sans">
+              REAL-TIME WORKLOAD
+            </div>
+          </div>
+
+          <div className="h-44 w-full mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                margin={{ top: 10, right: 15, left: -25, bottom: 0 }}
+                barSize={32}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: "#64748b", fontSize: 10, fontWeight: 600 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: "#64748b", fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip 
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-slate-900 text-white p-2.5 rounded-xl shadow-xl border border-slate-800 text-[11px] font-sans">
+                          <p className="font-extrabold">{payload[0].name}</p>
+                          <p className="text-gray-300 mt-0.5">
+                            Jumlah: <span className="font-extrabold text-emerald-400">{payload[0].value}</span> tiket
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                  cursor={{ fill: '#f8fafc', opacity: 0.6 }} 
+                />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {/* NEW TICKET FORM */}

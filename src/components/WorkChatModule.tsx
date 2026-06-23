@@ -76,6 +76,8 @@ export const getRoleColorClass = (role: UserRole) => {
       return "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 ring-emerald-500/10";
     case "Finance":
       return "bg-blue-500/10 text-blue-400 border-blue-500/25 ring-blue-500/10";
+    case "HR":
+      return "bg-teal-500/10 text-teal-400 border-teal-500/25 ring-teal-500/10";
     case "Marketing/Sales":
       return "bg-pink-500/10 text-pink-400 border-pink-500/25 ring-pink-500/10";
     case "Staff Maintenance":
@@ -93,6 +95,7 @@ const ROLE_NAMES: Record<UserRole, string> = {
   "Manager": "Dewi Lestari",
   "Receptionist": "Anton Hartono",
   "Finance": "Siti Rahma",
+  "HR": "Siti Rahma (HR)",
   "Marketing/Sales": "Citra Kirana",
   "Staff Maintenance": "Rudi Tabuti",
   "Tenant/Penyewa": "Rian Hidayat"

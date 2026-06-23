@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
 // Load environment variables
@@ -158,6 +157,7 @@ Evaluasi tiket pengaduan tenant dan kondisi inventaris properti:
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     console.log("Running in DEVELOPMENT mode. Initializing Vite middleware...");
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

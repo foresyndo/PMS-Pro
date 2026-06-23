@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { jsPDF } from "jspdf";
 import {
   FileText,
   Calendar,
@@ -96,6 +97,140 @@ export default function DigitalContract({
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setSigned(false);
+  };
+
+  const exportToPDF = (con: Contract) => {
+    const tenantObj = tenants.find((t) => t.id === con.tenantId);
+    const tenantName = tenantObj?.name || "Penyewa";
+    const unitNo = getUnitNumber(con.unitId);
+    const propName = getPropertyName(con.unitId);
+
+    // Initialize jsPDF
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    // Page border & Background accent
+    doc.setFillColor(252, 251, 247); // warm white
+    doc.rect(5, 5, 200, 287, "F");
+    doc.setDrawColor(220, 215, 200);
+    doc.setLineWidth(0.5);
+    doc.rect(8, 8, 194, 281, "S");
+
+    // Header Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(16, 185, 129); // emerald-600
+    doc.text("SURAT KONTRAK SEWA (LEASE AGREEMENT)", 15, 25);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 116, 139);
+    doc.text(`No. Referensi: ${con.id.toUpperCase()}`, 15, 31);
+    doc.text(`Tanggal Cetak: ${new Date(con.createdAt || Date.now()).toLocaleDateString("id-ID")}`, 15, 35);
+
+    // Horizontal Accent Line
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(1.2);
+    doc.line(15, 39, 195, 39);
+
+    // Section 1: Parties
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(30, 41, 59);
+    doc.text("I. PIHAK YANG BERSEPAKAT", 15, 48);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text("PIHAK PERTAMA (Pengelola / Pemilik):", 15, 55);
+    doc.setFont("helvetica", "bold");
+    doc.text("PMS Pro (Milik Sahrul Viona)", 20, 60);
+
+    doc.setFont("helvetica", "normal");
+    doc.text("PIHAK KEDUA (Penyewa / Tenant):", 15, 68);
+    doc.setFont("helvetica", "bold");
+    doc.text(`${tenantName} (No. KTP: ${tenantObj?.ktpNumber || "N/A"})`, 20, 73);
+
+    // Section 2: Properti & Kamar
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 41, 59);
+    doc.text("II. DETAIL SPESIFIKASI UNIT & BIAYA SEWA", 15, 86);
+
+    doc.setFont("helvetica", "normal");
+    doc.text("Properti Induk    :", 15, 93);
+    doc.setFont("helvetica", "bold");
+    doc.text(propName, 48, 93);
+
+    doc.setFont("helvetica", "normal");
+    doc.text("Unit Kamar Sewa   :", 15, 98);
+    doc.setFont("helvetica", "bold");
+    doc.text(`No. Room ${unitNo}`, 48, 98);
+
+    doc.setFont("helvetica", "normal");
+    doc.text("Harga Sewa/Bulan  :", 15, 103);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Rp ${con.monthlyRent.toLocaleString("id-ID")}`, 48, 103);
+
+    doc.setFont("helvetica", "normal");
+    doc.text("Durasi Masa Sewa  :", 15, 108);
+    doc.setFont("helvetica", "bold");
+    doc.text(`${con.startDate} s.d ${con.endDate}`, 48, 108);
+
+    // Section 3: Terms
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 41, 59);
+    doc.text("III. KETENTUAN DAN SYARAT SEWA MENYEWA", 15, 120);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    const splitTerms = doc.splitTextToSize(con.termsDescription || "", 170);
+    doc.text(splitTerms, 15, 127);
+
+    // Signatures
+    const currentY = 220;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("PIHAK PERTAMA", 25, currentY);
+    doc.text("PIHAK KEDUA", 145, currentY);
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text("[ Ditandatangani secara digital ]", 18, currentY + 10);
+    doc.text("PMS Pro Owner & Admin", 25, currentY + 14);
+
+    // Draw a digital signature box for tenant
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(0.4);
+    doc.rect(132, currentY + 3, 50, 16);
+    doc.setTextColor(16, 185, 129);
+    doc.setFont("helvetica", "bold");
+    doc.text("VERIFIED SIGNATURE", 137, currentY + 9);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(`SECURE CODE: ${con.id.slice(0,8).toUpperCase()}`, 139, currentY + 14);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text(tenantName, 145, currentY + 24);
+
+    // Bottom banner certified
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(15, currentY + 35, 195, currentY + 35);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Surat Perjanjian Sewa Digital ini diterbitkan otomatis melalui aplikasi PMS Pro dan sah secara hukum.", 15, currentY + 41);
+    doc.text("Memiliki kekuatan hukum yang sama dengan kontak basah menurut UU ITE No. 11/2008 & PP No. 71/2019.", 15, currentY + 45);
+
+    // Save
+    doc.save(`KONTRAK_SEWA_ROOM_${unitNo}_${tenantName.replace(/\s+/g, "_")}.pdf`);
   };
 
   const handleGenerate = (e: React.FormEvent) => {
@@ -327,12 +462,22 @@ Surat perjanjian penyewaan ini ditandatangani secara sadar melalui media digital
                   <p className="text-[10px] text-gray-400">Tanda Tangan Digital Tersimpan</p>
                 </div>
                 
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
-                >
-                  <Printer className="h-4 w-4" /> Cetak / PDF
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 border border-slate-300 transition"
+                    title="Cetak lewat Browser"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Print
+                  </button>
+                  <button
+                    onClick={() => exportToPDF(selectedContract)}
+                    className="px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 font-bold text-xs rounded-xl flex items-center gap-1 shadow transition"
+                    title="Download File PDF Asli"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Unduh PDF
+                  </button>
+                </div>
               </div>
 
               {/* Box display draft formatting */}

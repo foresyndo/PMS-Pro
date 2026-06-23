@@ -6,7 +6,8 @@ export type UserRole =
   | "Finance"
   | "Marketing/Sales"
   | "Staff Maintenance"
-  | "Tenant/Penyewa";
+  | "Tenant/Penyewa"
+  | "HR";
 
 export interface UserProfile {
   uid: string;
@@ -210,4 +211,59 @@ export interface WorkChatMessage {
   message: string;
   createdAt: string;
 }
+
+export interface Employee {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  department: string;
+  status: "Active" | "Inactive";
+  joinedDate: string;
+  salary: number;
+}
+
+export interface Attendance {
+  id: string;
+  employeeId: string;
+  date: string;
+  checkIn: string;
+  checkOut: string;
+  status: "Present" | "Absent" | "Late" | "Leave";
+}
+
+export interface Payroll {
+  id: string;
+  employeeId: string;
+  month: string; // e.g., "Juni 2026"
+  basicSalary: number;
+  allowance: number;
+  deductions: number;
+  netSalary: number;
+  status: "Paid" | "Pending";
+  paymentDate?: string;
+}
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  leaveType: "Annual" | "Sick" | "Maternity" | "Unpaid" | "Other";
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: "Pending" | "Approved" | "Rejected";
+  createdAt: string;
+}
+
+export type ShiftType = "Morning" | "Afternoon" | "Night" | "Off";
+
+export interface ShiftSchedule {
+  id: string;
+  employeeId: string;
+  date: string; // ISO Date string, e.g., "2026-07-01"
+  shift: ShiftType;
+  updatedAt?: string;
+}
+
 
