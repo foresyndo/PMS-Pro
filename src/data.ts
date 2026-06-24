@@ -276,6 +276,7 @@ export const INITIAL_TENANTS: Tenant[] = [
     name: "Rian Aditya",
     ktpNumber: "32731102940001",
     phone: "083811223344",
+    email: "rian.aditya@gmail.com",
     address: "Jl. Margahayu Blok G No. 9, Bandung",
     jobTitle: "Software Engineer di GoTo",
     emergencyContact: {
@@ -290,6 +291,7 @@ export const INITIAL_TENANTS: Tenant[] = [
     name: "Jessica Lauren",
     ktpNumber: "3174092205960004",
     phone: "081288997766",
+    email: "jessica.lauren@mandiri.co.id",
     address: "Kencana Loka Sektor VII, BSD City, Tangerang",
     jobTitle: "Investment Analyst di Mandiri Sekuritas",
     emergencyContact: {
@@ -304,6 +306,7 @@ export const INITIAL_TENANTS: Tenant[] = [
     name: "Danu Broto",
     ktpNumber: "33211504910003",
     phone: "085211002299",
+    email: "danu.broto@consulting.com",
     address: "Sleman Permai II, Ngaglik, Sleman, Yogyakarta",
     jobTitle: "Business Consultant",
     emergencyContact: {

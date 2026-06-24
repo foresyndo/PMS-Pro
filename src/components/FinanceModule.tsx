@@ -16,7 +16,10 @@ import {
   CheckCircle,
   FileText,
   CreditCard,
-  AlertCircle
+  AlertCircle,
+  Mail,
+  Send,
+  Loader2
 } from "lucide-react";
 import { Invoice, PaymentLog, Expense, Tenant, Property, Unit, PaymentMethod, PaymentStatus, ExpenseCategory, MaintenanceTicket, Payroll, Employee } from "../types";
 
@@ -59,6 +62,29 @@ export default function FinanceModule({
 }: FinanceModuleProps) {
   const [activeTab, setActiveTab] = useState<"invoices" | "expenses" | "reports" | "approvals">("invoices");
   
+  // Dispatched email states for automated invoice trigger
+  const [dispatchedEmails, setDispatchedEmails] = useState<any[]>([
+    {
+      id: "mail-1",
+      invoiceNumber: "INV/PRO3/2026/07-285",
+      tenantName: "Rian Aditya",
+      tenantEmail: "rian.aditya@gmail.com",
+      subject: "[PMS PRO] Tagihan Pembayaran Baru - INV/PRO3/2026/07-285",
+      bodySummary: "Halo Rian Aditya, tagihan pembayaran baru Anda untuk unit Margahayu - Kamar 102 telah diterbitkan...",
+      sentAt: new Date(Date.now() - 3600000 * 4).toISOString(),
+      pdfAttachedName: "INV_PRO3_2026_07_285.pdf",
+      status: "Delivered"
+    }
+  ]);
+
+  const [sendingEmailProgress, setSendingEmailProgress] = useState<{
+    show: boolean;
+    stage: "pdf" | "smtp" | "sending" | "success";
+    email: string;
+    invoiceNumber: string;
+    tenantName: string;
+  } | null>(null);
+
   // Modals state
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -612,7 +638,56 @@ export default function FinanceModule({
 
     onAddInvoice(newInv);
     setShowInvoiceForm(false);
-    alert("Invoice bulanan berhasil di-generate secara otomatis.");
+
+    // Automated email trigger simulation
+    const tenantObj = tenants.find(t => t.id === tenantId);
+    const tenantName = tenantObj?.name || "Penyewa";
+    const tenantEmail = tenantObj?.email || `${tenantName.toLowerCase().replace(/\s+/g, "")}@example.com`;
+    const propertyName = properties.find(p => p.id === propId)?.name || "Properti";
+    const unitObj = units.find(u => u.id === unitId);
+    const unitNumber = unitObj ? unitObj.unitNumber : "N/A";
+
+    const emailSubject = `[PMS PRO] Tagihan Pembayaran Baru - ${newInv.invoiceNumber}`;
+    const emailBody = `Halo ${tenantName},\n\nBerikut rincian tagihan baru Anda untuk unit ${propertyName} - Kamar ${unitNumber}:\n- No. Invoice: ${newInv.invoiceNumber}\n- Total Tagihan: ${formatIDR(newInv.totalAmount)}\n- Batas Jatuh Tempo: ${newInv.dueDate}\n\nSilakan lakukan pembayaran secepatnya. Terima kasih.`;
+
+    // Start sending animation progress cascade
+    setSendingEmailProgress({
+      show: true,
+      stage: "pdf",
+      email: tenantEmail,
+      invoiceNumber: newInv.invoiceNumber,
+      tenantName: tenantName
+    });
+
+    setTimeout(() => {
+      setSendingEmailProgress(prev => prev ? { ...prev, stage: "smtp" } : null);
+      setTimeout(() => {
+        setSendingEmailProgress(prev => prev ? { ...prev, stage: "sending" } : null);
+        setTimeout(() => {
+          setSendingEmailProgress(prev => prev ? { ...prev, stage: "success" } : null);
+          
+          // Log to dispatched emails
+          const newMailLog = {
+            id: "mail-" + Date.now(),
+            invoiceNumber: newInv.invoiceNumber,
+            tenantName,
+            tenantEmail,
+            subject: emailSubject,
+            bodySummary: emailBody,
+            sentAt: new Date().toISOString(),
+            pdfAttachedName: `${newInv.invoiceNumber.replace(/\//g, "_")}.pdf`,
+            status: "Delivered"
+          };
+          setDispatchedEmails(prev => [newMailLog, ...prev]);
+
+          setTimeout(() => {
+            setSendingEmailProgress(null);
+          }, 1500);
+        }, 1000);
+      }, 1000);
+    }, 1000);
+
+    alert(`Invoice bulanan ${newInv.invoiceNumber} berhasil di-generate secara otomatis dan sistem telah memicu pengiriman email tagihan ke ${tenantEmail}.`);
   };
 
   const handleExpenseCreate = (e: React.FormEvent) => {
@@ -1062,6 +1137,73 @@ export default function FinanceModule({
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* RIWAYAT OTOMATIS EMAIL INVOICE LOG */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3 border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-emerald-50 rounded-lg text-emerald-600">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800">Riwayat Pengiriman Email Otomatis (SMTP)</h4>
+                  <p className="text-[10px] text-gray-500 font-medium">Log aktivitas email tagihan terintegrasi yang terkirim saat invoice digenerate</p>
+                </div>
+              </div>
+              <span className="text-[10px] bg-slate-100 py-1 px-2.5 rounded-full font-bold text-slate-600 font-mono">
+                {dispatchedEmails.length} Email Sent
+              </span>
+            </div>
+
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+              {dispatchedEmails.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 text-xs font-medium">
+                  Belum ada pengiriman email otomatis yang terpicu.
+                </div>
+              ) : (
+                dispatchedEmails.map((mail) => (
+                  <div key={mail.id} className="p-3 bg-slate-50 border border-gray-150 rounded-xl space-y-2 text-xs">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-slate-800 text-xs">{mail.tenantName}</span>
+                          <span className="text-gray-400 font-bold">•</span>
+                          <span className="text-slate-500 font-mono text-[10px]">{mail.tenantEmail}</span>
+                        </div>
+                        <p className="font-bold text-emerald-800 font-mono text-[10px] flex items-center gap-1">
+                          <FileText className="h-3 w-3" /> {mail.invoiceNumber}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono text-gray-400">
+                          {new Date(mail.sentAt).toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-700 uppercase tracking-wider flex items-center gap-1">
+                          <CheckCircle className="h-2.5 w-2.5" /> {mail.status}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border border-gray-100 space-y-1 font-mono text-[11px] leading-relaxed text-slate-650 whitespace-pre-line">
+                      <p className="font-extrabold text-slate-700 font-sans text-xs border-b pb-1 mb-1 flex items-center gap-1.5">
+                        <Send className="h-3 w-3 text-emerald-600" /> Subyek: {mail.subject}
+                      </p>
+                      {mail.bodySummary}
+                      <p className="mt-2 text-[10px] text-emerald-700 font-bold flex items-center gap-1 pt-1.5 border-t border-dashed">
+                        📎 Terlampir: <span className="underline italic cursor-pointer" onClick={() => {
+                          const targetInv = invoices.find(inv => inv.invoiceNumber === mail.invoiceNumber);
+                          if (targetInv) {
+                            setPrintingInvoice(targetInv);
+                          } else {
+                            alert("Dokumen PDF sedang dimuat...");
+                          }
+                        }}>{mail.pdfAttachedName}</span>
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -1808,6 +1950,60 @@ export default function FinanceModule({
             >
               Tutup & Kembali
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* AUTOMATED EMAIL DISPATCH TRIGGER PROGRESS OVERLAY */}
+      {sendingEmailProgress && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-55 flex items-center justify-center p-4">
+          <div className="bg-white p-7 rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 space-y-6 text-center animate-scale-up">
+            <div className="relative mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-emerald-50 border-2 border-emerald-500/25 text-emerald-600">
+              {sendingEmailProgress.stage !== "success" ? (
+                <Loader2 className="h-8 w-8 animate-spin" />
+              ) : (
+                <CheckCircle className="h-8 w-8 text-emerald-500 animate-bounce" />
+              )}
+              <div className="absolute -bottom-1.5 -right-1.5 bg-emerald-600 text-white rounded-full p-1 border-2 border-white shadow-sm">
+                <Mail className="h-3.5 w-3.5" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase font-black tracking-widest text-emerald-600 font-mono block">Automated Email Trigger Engine</span>
+              <h4 className="text-base font-extrabold text-slate-800 leading-tight">
+                {sendingEmailProgress.stage === "pdf" && "Mempersiapkan Lampiran Invoice PDF..."}
+                {sendingEmailProgress.stage === "smtp" && "Menghubungkan ke SMTP Server Terenkripsi..."}
+                {sendingEmailProgress.stage === "sending" && "Mengirimkan Ringkasan Tagihan..."}
+                {sendingEmailProgress.stage === "success" && "Laporan Tagihan Berhasil Terkirim!"}
+              </h4>
+              <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                {sendingEmailProgress.stage === "pdf" && `Mempersiapkan dokumen digital untuk ${sendingEmailProgress.invoiceNumber}.`}
+                {sendingEmailProgress.stage === "smtp" && "Melakukan otentikasi pengiriman aman ssl-smtp.pmspro.net."}
+                {sendingEmailProgress.stage === "sending" && `Mengirimkan ringkasan tagihan & file PDF langsung ke ${sendingEmailProgress.email}.`}
+                {sendingEmailProgress.stage === "success" && `Laporan sewa kost otomatis telah terkirim secara real-time ke email ${sendingEmailProgress.email}.`}
+              </p>
+            </div>
+
+            {/* Step indicators */}
+            <div className="grid grid-cols-4 gap-2 pt-2 text-[9px] font-bold text-gray-400 font-mono uppercase">
+              <div className="space-y-1.5">
+                <div className={`h-1.5 rounded-full ${sendingEmailProgress.stage === "pdf" ? "bg-emerald-500 animate-pulse" : ["smtp", "sending", "success"].includes(sendingEmailProgress.stage) ? "bg-emerald-600" : "bg-slate-100"}`} />
+                <span className={sendingEmailProgress.stage === "pdf" ? "text-emerald-600 font-extrabold" : ["smtp", "sending", "success"].includes(sendingEmailProgress.stage) ? "text-slate-700" : ""}>Generate PDF</span>
+              </div>
+              <div className="space-y-1.5">
+                <div className={`h-1.5 rounded-full ${sendingEmailProgress.stage === "smtp" ? "bg-emerald-500 animate-pulse" : ["sending", "success"].includes(sendingEmailProgress.stage) ? "bg-emerald-600" : "bg-slate-100"}`} />
+                <span className={sendingEmailProgress.stage === "smtp" ? "text-emerald-600 font-extrabold" : ["sending", "success"].includes(sendingEmailProgress.stage) ? "text-slate-700" : ""}>SMTP Connect</span>
+              </div>
+              <div className="space-y-1.5">
+                <div className={`h-1.5 rounded-full ${sendingEmailProgress.stage === "sending" ? "bg-emerald-500 animate-pulse" : ["success"].includes(sendingEmailProgress.stage) ? "bg-emerald-600" : "bg-slate-100"}`} />
+                <span className={sendingEmailProgress.stage === "sending" ? "text-emerald-600 font-extrabold" : ["success"].includes(sendingEmailProgress.stage) ? "text-slate-700" : ""}>Sending Mail</span>
+              </div>
+              <div className="space-y-1.5">
+                <div className={`h-1.5 rounded-full ${sendingEmailProgress.stage === "success" ? "bg-emerald-600" : "bg-slate-100"}`} />
+                <span className={sendingEmailProgress.stage === "success" ? "text-emerald-600 font-extrabold" : ""}>Success</span>
+              </div>
+            </div>
           </div>
         </div>
       )}

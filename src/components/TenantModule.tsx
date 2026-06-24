@@ -35,6 +35,7 @@ export default function TenantModule({
   const [name, setName] = useState("");
   const [ktpNumber, setKtpNumber] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [emergencyName, setEmergencyName] = useState("");
@@ -46,6 +47,7 @@ export default function TenantModule({
     setName("");
     setKtpNumber("");
     setPhone("");
+    setEmail("");
     setAddress("");
     setJobTitle("");
     setEmergencyName("");
@@ -63,6 +65,7 @@ export default function TenantModule({
       name,
       ktpNumber,
       phone,
+      email: email || `${name.toLowerCase().replace(/\s+/g, "")}@example.com`,
       address,
       jobTitle,
       emergencyContact: {
@@ -156,6 +159,18 @@ export default function TenantModule({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="08381122..."
+                  className="w-full text-slate-800 p-2.5 border border-gray-200 rounded-xl focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Email Tenant *</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="nama@email.com"
                   className="w-full text-slate-800 p-2.5 border border-gray-200 rounded-xl focus:outline-none"
                   required
                 />
@@ -303,6 +318,9 @@ export default function TenantModule({
                 <div className="space-y-1">
                   <span className="text-[10px] text-gray-400 uppercase font-bold block">Detail Kontak</span>
                   <p className="font-semibold text-slate-800 flex items-center gap-1"><Phone className="h-3.5 w-3.5 text-emerald-600" /> {tenant.phone}</p>
+                  {tenant.email && (
+                    <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">{tenant.email}</p>
+                  )}
                 </div>
 
                 <div className="space-y-1">

@@ -56,6 +56,7 @@ export interface Tenant {
   ktpNumber: string;
   ktpUrl?: string;
   phone: string;
+  email?: string;
   address: string;
   jobTitle: string;
   emergencyContact: {

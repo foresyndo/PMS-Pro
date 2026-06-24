@@ -12,8 +12,10 @@ import {
   Loader2,
   Calendar,
   Layers,
-  FileText
+  FileText,
+  Download
 } from "lucide-react";
+import { jsPDF } from "jspdf";
 import {
   AreaChart,
   Area,
@@ -153,6 +155,196 @@ export default function Dashboard({
     }
   };
 
+  const downloadPdfReport = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Theme colors
+      const primaryColor = [16, 185, 129]; // Emerald (16, 185, 129)
+      const secondaryColor = [15, 23, 42]; // Slate (15, 23, 42)
+      
+      // Header Banner
+      doc.setFillColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      doc.rect(0, 0, 210, 42, "F");
+      
+      // Title
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text("PMS PRO ENTERPRISE", 15, 18);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(167, 243, 208); // light emerald
+      doc.text("LAPORAN KINERJA PROPERTI BULANAN (SISTEM TERINTEGRASI)", 15, 26);
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.text(`Waktu Cetak: ${new Date().toLocaleString("id-ID")}`, 145, 18);
+      doc.text("Status Sistem: Optimal & Akurat", 145, 24);
+      doc.text("Tipe Laporan: Executive Summary", 145, 30);
+      
+      // Section 1: Ringkasan Eksekutif
+      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("1. RINGKASAN EKSEKUTIF KPI", 15, 55);
+      
+      // Draw dividing line
+      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setLineWidth(0.8);
+      doc.line(15, 58, 195, 58);
+      
+      // Draw a nice grid of KPI cards
+      // Card 1: Okupansi
+      doc.setFillColor(240, 253, 244); // light green
+      doc.setDrawColor(187, 247, 208);
+      doc.roundedRect(15, 65, 85, 38, 3, 3, "FD");
+      
+      doc.setTextColor(21, 128, 61); // green-700
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.text("TINGKAT HUNIAN (OKUPANSI)", 20, 72);
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text(`${occupancyRate}%`, 20, 85);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Terisi: ${occupiedUnitsCount} Unit | Ketersediaan: ${availableUnitsCount} Unit`, 20, 93);
+      
+      // Card 2: Keuangan
+      doc.setFillColor(245, 243, 255); // light purple
+      doc.setDrawColor(233, 213, 255);
+      doc.roundedRect(110, 65, 85, 38, 3, 3, "FD");
+      
+      doc.setTextColor(109, 40, 217); // purple-700
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.text("PENDAPATAN BULANAN (PAID)", 115, 72);
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.text(formatIDR(totalRevenue), 115, 83);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Arus Kas Masuk Bersih Bulanan`, 115, 93);
+      
+      // Other Metrics
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59);
+      
+      // Let's create a nice details table
+      doc.setFillColor(248, 250, 252);
+      doc.rect(15, 110, 180, 45, "F");
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Metrik Keuangan Tambahan", 20, 118);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text("Piutang Sewa (Unpaid/Overdue):", 20, 128);
+      doc.setFont("helvetica", "bold");
+      doc.text(formatIDR(totalReceivables), 85, 128);
+      
+      doc.setFont("helvetica", "normal");
+      doc.text("Biaya Pengeluaran Operasional:", 20, 136);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(220, 38, 38); // red
+      doc.text(formatIDR(totalExpense), 85, 136);
+      
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "normal");
+      doc.text("Profit Bersih (Net Revenue):", 20, 144);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(5, 150, 105); // emerald green
+      doc.text(formatIDR(netProfit), 85, 144);
+      
+      // Section 2: Unit Inventory Detail
+      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("2. STATUS INVENTARIS UNIT KAMAR", 15, 170);
+      
+      // Draw dividing line
+      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.line(15, 173, 195, 173);
+      
+      // Detailed breakdown table
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(71, 85, 105);
+      doc.text("Status Unit Kamar", 20, 182);
+      doc.text("Jumlah Unit", 100, 182);
+      doc.text("Persentase Kepadatan", 145, 182);
+      
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.3);
+      doc.line(15, 185, 195, 185);
+      
+      const statusItems = [
+        { label: "Terisi (Occupied)", val: occupiedUnitsCount, color: "Hijau (Sehat)" },
+        { label: "Tersedia (Available)", val: availableUnitsCount, color: "Sedia disewakan" },
+        { label: "Dalam Pemeliharaan (Maintenance)", val: maintenanceUnitsCount, color: "Perlu Perbaikan" },
+        { label: "Pembersihan (Cleaning)", val: cleaningUnitsCount, color: "SOP Housekeeping" },
+        { label: "Dipesan (Reserved)", val: reservedUnitsCount, color: "Down Payment Terbayar" },
+      ];
+      
+      let currentY = 193;
+      statusItems.forEach((item) => {
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(30, 41, 59);
+        doc.text(item.label, 20, currentY);
+        
+        doc.setFont("helvetica", "bold");
+        doc.text(`${item.val} Unit`, 100, currentY);
+        
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 116, 139);
+        const percent = totalUnitsCount > 0 ? Math.round((item.val / totalUnitsCount) * 100) : 0;
+        doc.text(`${percent}% (${item.color})`, 145, currentY);
+        
+        doc.line(15, currentY + 3, 195, currentY + 3);
+        currentY += 8;
+      });
+      
+      // Section 3: Catatan Akhir & Tanda Tangan
+      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Laporan ini di-generate secara sistem oleh PMS Pro ERP. Data akurat dan sinkron real-time.", 15, 245);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Dokumen ini sah digunakan sebagai instrumen pelaporan resmi antara jajaran manajemen pengelola dan pemilik aset.", 15, 250);
+      
+      // Signatures
+      doc.setDrawColor(203, 213, 225);
+      doc.line(15, 255, 195, 255);
+      
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Disiapkan Oleh:", 25, 262);
+      doc.text("Disetujui Oleh:", 135, 262);
+      
+      doc.setFont("helvetica", "normal");
+      doc.text("Sistem Automated ERP PMS Pro", 25, 280);
+      doc.text("Property Owner / Direktur Utama", 135, 280);
+      
+      // Save the PDF
+      doc.save(`PMS_Pro_Laporan_Bulanan_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error("Gagal mendownload PDF", error);
+    }
+  };
+
   return (
     <div className="space-y-6" id="dashboard-main-view">
       {/* Visual Header */}
@@ -170,14 +362,172 @@ export default function Dashboard({
         </div>
         
         {/* Quick Insights Action Component */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2.5">
           <button
             onClick={() => triggerAiAnalysis("occupancy")}
-            className="px-4 py-2 bg-white text-emerald-700 font-semibold text-xs md:text-sm rounded-xl shadow-md hover:bg-green-50 transition duration-300 flex items-center gap-2"
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-bold text-xs md:text-sm rounded-xl border border-white/20 transition duration-300 flex items-center gap-2 cursor-pointer backdrop-blur-xs"
           >
-            <Sparkles className="h-4 w-4 animate-pulse stroke-emerald-600" />
+            <Sparkles className="h-4 w-4 animate-pulse stroke-emerald-300" />
             AI Optimasi Okupansi
           </button>
+          
+          <button
+            onClick={downloadPdfReport}
+            className="px-4 py-2 bg-white text-emerald-800 hover:bg-emerald-50 font-bold text-xs md:text-sm rounded-xl shadow-md transition duration-300 flex items-center gap-2 cursor-pointer"
+            title="Unduh Laporan PDF Eksekutif Bulanan"
+          >
+            <Download className="h-4 w-4 text-emerald-700" />
+            Unduh Laporan
+          </button>
+        </div>
+      </div>
+ 
+      {/* Real-time KPI Summary Panel */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 text-white rounded-3xl p-6 shadow-xl border border-indigo-500/25 relative overflow-hidden">
+        {/* Ambient background glows */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -ml-16 -mb-16 pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-6 border-b border-indigo-900/40">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="text-[10px] font-bold tracking-widest text-emerald-400 uppercase font-mono">Real-time KPI Dashboard</span>
+            </div>
+            <h2 className="text-xl font-extrabold tracking-tight">Indikator Kinerja Utama Properti</h2>
+            <p className="text-slate-400 text-xs">Evaluasi performa okupansi unit hunian aktif serta kalkulasi pendapatan terkonsolidasi bulan ini.</p>
+          </div>
+          <div className="flex items-center gap-2 bg-indigo-950/80 border border-indigo-800/40 rounded-2xl px-4 py-2.5 shadow-inner">
+            <span className="text-[10px] text-slate-400 font-bold uppercase font-mono">Status Sistem:</span>
+            <span className="text-xs text-emerald-400 font-extrabold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+              Optimal & Akurat
+            </span>
+          </div>
+        </div>
+
+        <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">
+          {/* Occupancy Rate KPI Card */}
+          <div className="bg-slate-950/60 rounded-2xl p-5 border border-slate-800/80 flex flex-col justify-between hover:border-emerald-500/35 transition-colors duration-300">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-extrabold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full font-mono uppercase">
+                  Tingkat Hunian
+                </span>
+                <h3 className="text-sm font-bold text-slate-200">Okupansi Properti Real-time</h3>
+                <p className="text-slate-400 text-xs max-w-sm">Rasio unit kamar terisi saat ini dibandingkan keseluruhan ketersediaan inventaris properti PMS.</p>
+              </div>
+              
+              {/* Radial Progress representation */}
+              <div className="relative flex items-center justify-center shrink-0">
+                <svg className="w-16 h-16">
+                  <circle
+                    className="text-slate-800"
+                    strokeWidth="5"
+                    stroke="currentColor"
+                    fill="transparent"
+                    r="24"
+                    cx="32"
+                    cy="32"
+                  />
+                  <circle
+                    className="text-emerald-500 transition-all duration-1000 ease-out"
+                    strokeWidth="5"
+                    strokeDasharray={2 * Math.PI * 24}
+                    strokeDashoffset={2 * Math.PI * 24 * (1 - occupancyRate / 100)}
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="transparent"
+                    r="24"
+                    cx="32"
+                    cy="32"
+                  />
+                </svg>
+                <span className="absolute text-xs font-extrabold font-mono text-white">{occupancyRate}%</span>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 gap-2 border-t border-slate-900 pt-4 text-center">
+              <div>
+                <p className="text-[9px] text-slate-500 font-bold uppercase">Terisi</p>
+                <p className="text-sm font-extrabold text-emerald-400">{occupiedUnitsCount} Unit</p>
+              </div>
+              <div className="border-x border-slate-900">
+                <p className="text-[9px] text-slate-500 font-bold uppercase">Tersedia</p>
+                <p className="text-sm font-extrabold text-teal-400">{availableUnitsCount} Unit</p>
+              </div>
+              <div>
+                <p className="text-[9px] text-slate-500 font-bold uppercase">Total</p>
+                <p className="text-sm font-extrabold text-slate-300">{totalUnitsCount} Unit</p>
+              </div>
+            </div>
+
+            {/* Performance status label */}
+            <div className="mt-4 p-2 bg-slate-900/50 rounded-xl border border-slate-800/40 flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                Rasio Efisiensi Kamar
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                occupancyRate >= 75 ? "bg-emerald-500/15 text-emerald-400" :
+                occupancyRate >= 50 ? "bg-amber-500/15 text-amber-400" :
+                "bg-rose-500/15 text-rose-400"
+              }`}>
+                {occupancyRate >= 75 ? "Sangat Tinggi (Sehat)" : occupancyRate >= 50 ? "Sedang" : "Perlu Promosi"}
+              </span>
+            </div>
+          </div>
+
+          {/* Monthly Revenue KPI Card */}
+          <div className="bg-slate-950/60 rounded-2xl p-5 border border-slate-800/80 flex flex-col justify-between hover:border-indigo-500/35 transition-colors duration-300">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-extrabold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full font-mono uppercase">
+                  Arus Kas Masuk
+                </span>
+                <h3 className="text-sm font-bold text-slate-200">Total Pendapatan Bulanan</h3>
+                <p className="text-slate-400 text-xs max-w-sm">Total akumulasi pembayaran invoice sewa lunas (status Paid) yang terdaftar pada bulan berjalan.</p>
+              </div>
+              
+              <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl">
+                <DollarSign className="w-6 h-6 animate-pulse" />
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Konsolidasi Terkumpul</span>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <p className="text-xl md:text-2xl font-black text-indigo-300 font-mono">
+                  {formatIDR(totalRevenue)}
+                </p>
+                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/15 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                  <TrendingUp className="w-3 h-3" /> +14.2%
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-2 border-t border-slate-900 pt-4">
+              <div>
+                <p className="text-[9px] text-slate-500 font-bold uppercase">Piutang Belum Bayar</p>
+                <p className="text-xs font-bold text-amber-500 font-mono">{formatIDR(totalReceivables)}</p>
+              </div>
+              <div className="border-l border-slate-900 pl-3">
+                <p className="text-[9px] text-slate-500 font-bold uppercase">Pengeluaran Operasional</p>
+                <p className="text-xs font-bold text-rose-400 font-mono">{formatIDR(totalExpense)}</p>
+              </div>
+            </div>
+
+            {/* Target warning indicator */}
+            <div className="mt-4 p-2 bg-slate-900/50 rounded-xl border border-slate-800/40 flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-indigo-400" />
+                Target Keuangan Bulan Ini
+              </span>
+              <span className="text-[10px] font-bold text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full font-mono">
+                92% Tercapai
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

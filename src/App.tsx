@@ -30,7 +30,8 @@ import {
   ShieldCheck,
   Trash2,
   Plus,
-  Calendar
+  Calendar,
+  Bell
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -127,6 +128,7 @@ export default function App() {
   const [userEmail, setUserEmail] = useState("admin@pms.pro");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   // Modified Login Portal States
   const [loginSubTab, setLoginSubTab] = useState<"login" | "register" | "accounts">("login");
@@ -625,6 +627,11 @@ export default function App() {
     }
   };
 
+  // Notification system calculation
+  const openMaintenanceTickets = maintenance.filter(t => t.status === "Open");
+  const pendingLeaveRequests = leaveRequests.filter(l => l.status === "Pending");
+  const totalNotificationsCount = openMaintenanceTickets.length + pendingLeaveRequests.length;
+
   // Nav items specifications
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -953,10 +960,13 @@ export default function App() {
                     const IconComp = item.icon;
                     const isActive = activeTab === item.id;
                     return (
-                      <button
+                      <motion.button
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-xs transition duration-200 uppercase tracking-wider ${
+                        whileHover={{ x: 5 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-xs transition duration-200 uppercase tracking-wider text-left ${
                           isActive
                             ? "bg-emerald-50 text-emerald-700 shadow-sm"
                             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -964,7 +974,7 @@ export default function App() {
                       >
                         <IconComp className={`h-4 w-4 transition-transform duration-200 ${isActive ? "text-emerald-700 scale-110" : "text-slate-400 opacity-80"}`} />
                         <span>{item.label}</span>
-                      </button>
+                      </motion.button>
                     );
                   })}
                 </nav>
@@ -1022,6 +1032,156 @@ export default function App() {
 
                 {/* Logged user email representation */}
                 <div className="flex items-center gap-3">
+                  {/* Early warning notification bell icon with dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsNotificationOpen(!isNotificationOpen)}
+                      className="relative p-2.5 bg-slate-50 border border-slate-200/85 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200/80 text-slate-600 rounded-full transition cursor-pointer flex items-center justify-center shadow-xs"
+                      title="Sistem Peringatan Dini"
+                    >
+                      <Bell className="h-4.5 w-4.5" />
+                      {totalNotificationsCount > 0 && (
+                        <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-md border-2 border-white animate-bounce">
+                          {totalNotificationsCount}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Notification Dropdown Panel */}
+                    <AnimatePresence>
+                      {isNotificationOpen && (
+                        <>
+                          {/* Close backdrop click interceptor */}
+                          <div 
+                            className="fixed inset-0 z-30" 
+                            onClick={() => setIsNotificationOpen(false)} 
+                          />
+                          
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute right-0 mt-3 w-80 sm:w-96 bg-white border border-slate-200/90 rounded-2xl shadow-xl overflow-hidden z-40 text-left"
+                          >
+                            <div className="bg-gradient-to-r from-emerald-800 to-teal-700 text-white p-4">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                  <Bell className="w-4 h-4 text-emerald-300" />
+                                  Sistem Peringatan Dini
+                                </h3>
+                                <span className="bg-emerald-900/60 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold">
+                                  {totalNotificationsCount} Pending
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-emerald-100/95 mt-1 leading-relaxed">
+                                Tindak lanjuti komplain fasilitas terdaftar atau pengajuan cuti tim agar pelayanan properti berjalan lancar.
+                              </p>
+                            </div>
+
+                            <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                              {totalNotificationsCount === 0 ? (
+                                <div className="p-8 text-center text-slate-400 space-y-2">
+                                  <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg mx-auto">
+                                    ✓
+                                  </div>
+                                  <p className="text-xs font-bold text-slate-800">Semua Beres!</p>
+                                  <p className="text-[10px]">Tidak ada komplain terbuka atau permintaan cuti tertunda.</p>
+                                </div>
+                              ) : (
+                                <>
+                                  {/* Open Maintenance Tickets */}
+                                  {openMaintenanceTickets.map((ticket) => {
+                                    const matchedUnit = units.find(u => u.id === ticket.unitId);
+                                    return (
+                                      <div key={ticket.id} className="p-3.5 hover:bg-slate-50 transition flex items-start gap-3">
+                                        <div className="p-2 bg-amber-50 text-amber-700 border border-amber-100 rounded-xl shrink-0 mt-0.5">
+                                          <Wrench className="w-4 h-4" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center justify-between gap-1.5 mb-1">
+                                            <span className="text-[10px] font-extrabold text-slate-800">
+                                              Kamar {matchedUnit?.unitNumber || "Kustom"}
+                                            </span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                                              ticket.priority === "Critical" ? "bg-rose-100 text-rose-700 border border-rose-200" :
+                                              ticket.priority === "High" ? "bg-amber-100 text-amber-700 border border-amber-200" :
+                                              "bg-blue-100 text-blue-750 border border-blue-200"
+                                            }`}>
+                                              {ticket.priority}
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-slate-600 font-semibold line-clamp-2 leading-relaxed">
+                                            {ticket.description}
+                                          </p>
+                                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
+                                            <span className="text-[9px] text-slate-400 font-mono">Komplain Baru</span>
+                                            <button
+                                              onClick={() => {
+                                                setActiveTab("maintenance");
+                                                setIsNotificationOpen(false);
+                                              }}
+                                              className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800 transition cursor-pointer flex items-center gap-0.5"
+                                            >
+                                              Proses Perbaikan →
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+
+                                  {/* Pending Leave Requests */}
+                                  {pendingLeaveRequests.map((req) => {
+                                    const empName = employees.find(e => e.id === req.employeeId)?.name || "Karyawan";
+                                    return (
+                                      <div key={req.id} className="p-3.5 hover:bg-slate-50 transition flex items-start gap-3">
+                                        <div className="p-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-xl shrink-0 mt-0.5">
+                                          <Briefcase className="w-4 h-4" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center justify-between gap-1.5 mb-1">
+                                            <span className="text-[10px] font-extrabold text-slate-800">
+                                              {empName}
+                                            </span>
+                                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[8px] font-bold uppercase">
+                                              Cuti {req.leaveType}
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-slate-600 font-semibold line-clamp-2 leading-relaxed">
+                                            Alasan: "{req.reason}" ({req.startDate} s/d {req.endDate})
+                                          </p>
+                                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
+                                            <span className="text-[9px] text-slate-400 font-mono">Persetujuan HR</span>
+                                            <button
+                                              onClick={() => {
+                                                setActiveTab("hris");
+                                                setIsNotificationOpen(false);
+                                              }}
+                                              className="text-[10px] font-bold text-indigo-700 hover:text-indigo-800 transition cursor-pointer flex items-center gap-0.5"
+                                            >
+                                              Otorisasi Cuti →
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </>
+                              )}
+                            </div>
+
+                            <div className="bg-slate-50 p-2.5 text-center border-t border-slate-100">
+                              <p className="text-[9px] text-slate-400 font-bold font-mono uppercase tracking-wider">
+                                PMS PRO EARLY WARNING ALARM SYSTEM
+                              </p>
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
                   <div className="hidden lg:flex items-center gap-2 text-xs">
                     <div className="h-8 w-8 rounded-full bg-emerald-50 border flex items-center justify-center text-emerald-800 font-bold">
                       SV
@@ -1232,58 +1392,74 @@ export default function App() {
             </main>
 
             {/* MOBILE SIDEBAR MODAL OVERLAY */}
-            {mobileMenuOpen && (
-              <div className="fixed inset-0 z-50 flex md:hidden">
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={() => setMobileMenuOpen(false)} />
-                <div className="relative flex flex-col w-64 max-w-xs bg-white text-slate-650 p-5 z-10 border-r border-slate-200">
-                  <div className="flex justify-between items-center pb-4 border-b border-slate-100">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-white text-sm font-display">P</div>
-                      <span className="font-display font-extrabold text-slate-800 text-base">PMS PRO</span>
-                    </div>
-                    <button onClick={() => setMobileMenuOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-850 rounded-lg border border-slate-100 transition-colors">
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <nav className="space-y-1 flex-1 overflow-y-auto pt-4 text-left">
-                    {navItems.map((item) => {
-                      if (!isTabAvailable(item.id)) return null;
-                      const IconComp = item.icon;
-                      const isActive = activeTab === item.id;
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            setActiveTab(item.id);
-                            setMobileMenuOpen(false);
-                          }}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition ${
-                            isActive
-                              ? "bg-emerald-50 text-emerald-850"
-                              : "text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          <IconComp className={`h-4 w-4 ${isActive ? "text-emerald-700" : "text-slate-400"}`} />
-                          <span>{item.label}</span>
-                        </button>
-                      );
-                    })}
-                  </nav>
-
-                  <button
-                    onClick={() => {
-                      setIsLoggedIn(false);
-                      setMobileMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold hover:bg-red-50 text-slate-500 hover:text-red-700 uppercase transition cursor-pointer"
+            <AnimatePresence>
+              {mobileMenuOpen && (
+                <div className="fixed inset-0 z-50 flex md:hidden">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs"
+                    onClick={() => setMobileMenuOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ x: "-100%" }}
+                    animate={{ x: 0 }}
+                    exit={{ x: "-100%" }}
+                    transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+                    className="relative flex flex-col w-64 max-w-xs bg-white text-slate-650 p-5 z-10 border-r border-slate-200 h-full"
                   >
-                    <LogOut className="h-4 w-4 animate-pulse text-red-500" />
-                    <span>Logout</span>
-                  </button>
+                    <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-white text-sm font-display">P</div>
+                        <span className="font-display font-extrabold text-slate-800 text-base">PMS PRO</span>
+                      </div>
+                      <button onClick={() => setMobileMenuOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-850 rounded-lg border border-slate-100 transition-colors">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <nav className="space-y-1 flex-1 overflow-y-auto pt-4 text-left">
+                      {navItems.map((item) => {
+                        if (!isTabAvailable(item.id)) return null;
+                        const IconComp = item.icon;
+                        const isActive = activeTab === item.id;
+                        return (
+                          <motion.button
+                            key={item.id}
+                            onClick={() => {
+                              setActiveTab(item.id);
+                              setMobileMenuOpen(false);
+                            }}
+                            whileTap={{ scale: 0.97 }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition ${
+                              isActive
+                                ? "bg-emerald-50 text-emerald-850"
+                                : "text-slate-600 hover:bg-slate-50"
+                            }`}
+                          >
+                            <IconComp className={`h-4 w-4 ${isActive ? "text-emerald-700" : "text-slate-400"}`} />
+                            <span>{item.label}</span>
+                          </motion.button>
+                        );
+                      })}
+                    </nav>
+
+                    <button
+                      onClick={() => {
+                        setIsLoggedIn(false);
+                        setMobileMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold hover:bg-red-50 text-slate-500 hover:text-red-700 uppercase transition cursor-pointer"
+                    >
+                      <LogOut className="h-4 w-4 animate-pulse text-red-500" />
+                      <span>Logout</span>
+                    </button>
+                  </motion.div>
                 </div>
-              </div>
-            )}
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
