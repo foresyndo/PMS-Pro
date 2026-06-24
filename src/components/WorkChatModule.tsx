@@ -21,7 +21,8 @@ import {
   Plus,
   Bell,
   X,
-  AlertCircle
+  AlertCircle,
+  Menu
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { UserRole, WorkChatMessage } from "../types";
@@ -140,6 +141,7 @@ export default function WorkChatModule({
 }: WorkChatModuleProps) {
   // Top level modules navigation: "chat" | "call" | "calendar" | "notes"
   const [activeTab, setActiveTab] = useState<"chat" | "call" | "calendar" | "notes">("chat");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Chat context navigation states
   const [channels, setChannels] = useState(DEFAULT_CHANNELS);
@@ -519,10 +521,36 @@ export default function WorkChatModule({
 
         {activeTab === "chat" && (
           <>
+            {/* Mobile Sidebar backdrop overlay */}
+            <AnimatePresence>
+              {isSidebarOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-30 md:hidden"
+                />
+              )}
+            </AnimatePresence>
+
             {/* Sidebar Columns - Obrolan, Saluran, DM */}
-            <div className="w-80 border-r border-slate-800/80 bg-slate-950 flex flex-col justify-between shrink-0 hidden md:flex">
+            <div className={`w-80 border-r border-slate-800/80 bg-slate-950 flex flex-col justify-between shrink-0 transition-transform duration-300 z-40 ${
+              isSidebarOpen 
+                ? "fixed inset-y-0 left-0 translate-x-0" 
+                : "hidden md:flex"
+            }`}>
               {/* Channel Search box */}
               <div className="p-4 border-b border-slate-800/80 space-y-3 shrink-0">
+                <div className="flex items-center justify-between md:hidden pb-1">
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest font-mono">Daftar Menu Obrolan</span>
+                  <button 
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="p-1 hover:bg-slate-900 rounded-lg text-slate-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                   <input
@@ -594,7 +622,10 @@ export default function WorkChatModule({
                       return (
                         <button
                           key={ch.id}
-                          onClick={() => setSelectedChatId(ch.id)}
+                          onClick={() => {
+                            setSelectedChatId(ch.id);
+                            setIsSidebarOpen(false);
+                          }}
                           className={`w-full flex items-start gap-2.5 px-3.5 py-3 rounded-xl text-left transition duration-150 border ${
                             isActive
                               ? "bg-slate-900 border-indigo-500/35 text-white shadow"
@@ -630,7 +661,10 @@ export default function WorkChatModule({
                       return (
                         <button
                           key={g.id}
-                          onClick={() => setSelectedChatId(g.id)}
+                          onClick={() => {
+                            setSelectedChatId(g.id);
+                            setIsSidebarOpen(false);
+                          }}
                           className={`w-full flex flex-col items-start gap-1 p-3.5 rounded-xl text-left transition duration-150 border ${
                             isActive
                               ? "bg-slate-900 border-indigo-500/35 text-white shadow"
@@ -671,6 +705,7 @@ export default function WorkChatModule({
                               return;
                             }
                             setSelectedChatId(role);
+                            setIsSidebarOpen(false);
                           }}
                           className={`w-full flex items-center justify-between p-3 rounded-xl transition duration-150 border ${
                             isActive
@@ -743,7 +778,14 @@ export default function WorkChatModule({
                   </span>
                   <div>
                     {/* Mobile selectors for channels */}
-                    <div className="md:hidden">
+                    <div className="md:hidden flex items-center gap-2">
+                      <button
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white p-2.5 rounded-xl flex items-center justify-center transition duration-150 cursor-pointer shadow-lg shrink-0 border border-indigo-500/20"
+                        title="Tampilkan Menu Obrolan"
+                      >
+                        <Menu className="w-4 h-4" />
+                      </button>
                       <select
                         value={selectedChatId}
                         onChange={(e) => {
@@ -757,7 +799,7 @@ export default function WorkChatModule({
                           }
                           setSelectedChatId(val);
                         }}
-                        className="bg-slate-950 text-slate-100 font-extrabold text-xs rounded-lg border border-slate-805 py-1.5 px-3 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-lg"
+                        className="bg-slate-950 text-slate-100 font-extrabold text-xs rounded-xl border border-slate-800 py-2 px-3 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-lg"
                       >
                         <optgroup label="Saluran">
                           {channels.map(c => <option key={c.id} value={c.id}>{c.id}</option>)}

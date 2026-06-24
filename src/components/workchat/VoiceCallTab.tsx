@@ -82,6 +82,32 @@ export default function VoiceCallTab({ currentRole, roleName, onShowNotification
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   
+  // Real Local Media Stream tracking state
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+
+  useEffect(() => {
+    let activeStream: MediaStream | null = null;
+    
+    if (callState === "active" && callType === "video" && !isCameraOff) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          setLocalStream(stream);
+          activeStream = stream;
+        })
+        .catch((err) => {
+          console.error("Gagal mendapatkan akses kamera / video call di chat:", err);
+          setLocalStream(null);
+        });
+    }
+
+    return () => {
+      if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
+      }
+      setLocalStream(null);
+    };
+  }, [callState, callType, isCameraOff]);
+
   // Timer state
   const [duration, setDuration] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -277,13 +303,25 @@ export default function VoiceCallTab({ currentRole, roleName, onShowNotification
                   </>
                 )}
                 
-                <div className={`w-28 h-28 rounded-full border-2 border-indigo-500/40 bg-slate-900 flex items-center justify-center text-3xl font-bold font-mono text-indigo-300 ring-8 ring-slate-950 shadow-2xl overflow-hidden`}>
+                <div className={`w-28 h-28 rounded-full border-2 border-indigo-500/40 bg-slate-900 flex items-center justify-center text-3xl font-bold font-mono text-indigo-300 ring-8 ring-slate-950 shadow-2xl overflow-hidden relative`}>
                   {callType === "video" && !isCameraOff && callState === "active" ? (
-                    <div className="w-full h-full bg-rose-500 flex items-center justify-center text-white relative">
-                      {/* Fake simulated camera feed representation */}
-                      <span className="absolute bottom-2 right-2 text-[8px] bg-slate-950/70 p-1 px-1.5 rounded uppercase">Umpan Video</span>
-                      <span className="animate-spin text-lg">📹</span>
-                    </div>
+                    localStream ? (
+                      <video
+                        ref={(el) => {
+                          if (el) el.srcObject = localStream;
+                        }}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-rose-500 flex items-center justify-center text-white relative">
+                        {/* Fake simulated camera feed representation */}
+                        <span className="absolute bottom-2 right-2 text-[8px] bg-slate-950/70 p-1 px-1.5 rounded uppercase">Umpan Video</span>
+                        <span className="animate-spin text-lg">📹</span>
+                      </div>
+                    )
                   ) : (
                     ROLE_AVATARS[targetContact]
                   )}

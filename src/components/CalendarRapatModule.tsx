@@ -217,6 +217,32 @@ export default function CalendarRapatModule({ currentRole, roleName, onShowNotif
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
 
+  // Real Local Media Stream tracking state
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+
+  useEffect(() => {
+    let activeStream: MediaStream | null = null;
+    
+    if (callState === "active" && callType === "video" && !isCameraOff) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          setLocalStream(stream);
+          activeStream = stream;
+        })
+        .catch((err) => {
+          console.error("Gagal mendapatkan akses kamera / video call:", err);
+          setLocalStream(null);
+        });
+    }
+
+    return () => {
+      if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
+      }
+      setLocalStream(null);
+    };
+  }, [callState, callType, isCameraOff]);
+
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // WebRTC negotiation configurations & simulated media log parameters
@@ -959,32 +985,53 @@ export default function CalendarRapatModule({ currentRole, roleName, onShowNotif
 
                   {/* Participant 2: Local User Camera */}
                   <div className="bg-slate-950 rounded-2xl border border-slate-800 relative overflow-hidden flex flex-col items-center justify-center p-4">
-                    <span className="absolute top-3 left-3 bg-slate-900/85 border border-slate-800 text-[9px] font-mono font-bold text-slate-400 px-2 py-0.5 rounded">
-                      UMBAK SAYA ({currentRole})
+                    <span className="absolute top-3 left-3 bg-slate-900/85 border border-slate-800 text-[9px] font-mono font-bold text-slate-400 px-2 py-0.5 rounded z-10">
+                      UMPAK SAYA ({currentRole})
                     </span>
 
                     {!isCameraOff ? (
-                      <div className="text-center space-y-4">
-                        <div className="w-24 h-24 rounded-full bg-emerald-500/10 border-2 border-emerald-400/30 flex items-center justify-center text-4xl mx-auto shadow-inner animate-pulse">
-                          👨‍💻
+                      localStream ? (
+                        <div className="absolute inset-0 w-full h-full">
+                          <video
+                            ref={(el) => {
+                              if (el) el.srcObject = localStream;
+                            }}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover rounded-2xl"
+                          />
+                          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between bg-slate-950/70 p-2 rounded-xl text-[10px] text-white">
+                            <span className="font-semibold">{roleName}</span>
+                            <span className="text-emerald-400 font-mono flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                              Kamera Aktif (Live)
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="text-sm font-extrabold text-white">{roleName}</h4>
-                          <span className="text-[10px] text-emerald-400 bg-slate-900 border border-emerald-950 p-1 px-2 rounded-full font-bold">Kamera Anda</span>
+                      ) : (
+                        <div className="text-center space-y-4">
+                          <div className="w-24 h-24 rounded-full bg-emerald-500/10 border-2 border-emerald-400/30 flex items-center justify-center text-4xl mx-auto shadow-inner animate-pulse">
+                            👨‍💻
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-extrabold text-white">{roleName}</h4>
+                            <span className="text-[10px] text-emerald-400 bg-slate-900 border border-emerald-950 p-1 px-2 rounded-full font-bold">Kamera Anda (Simulasi)</span>
+                          </div>
+                          <div className="flex gap-1 justify-center h-4 items-end">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                              <span 
+                                key={i} 
+                                className="w-1 bg-emerald-400/60 rounded animate-bounce"
+                                style={{ 
+                                  height: `${Math.floor(Math.random() * 12) + 4}px`,
+                                  animationDelay: `${i * 100}ms`
+                                }}
+                              />
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex gap-1 justify-center h-4 items-end">
-                          {Array.from({ length: 6 }).map((_, i) => (
-                            <span 
-                              key={i} 
-                              className="w-1 bg-emerald-400/60 rounded animate-bounce"
-                              style={{ 
-                                height: `${Math.floor(Math.random() * 12) + 4}px`,
-                                animationDelay: `${i * 100}ms`
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
+                      )
                     ) : (
                       <div className="text-center text-slate-600 space-y-2">
                         <VideoOff className="w-10 h-10 mx-auto" />
