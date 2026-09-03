@@ -12,7 +12,8 @@ import {
   InventoryItem,
   NotificationLog,
   ReportSnapshot,
-  Lead
+  Lead,
+  WhatsAppSchedulerLog
 } from "./types";
 
 export const INITIAL_USERS: UserProfile[] = [
@@ -419,6 +420,9 @@ export const INITIAL_INVOICES: Invoice[] = [
     totalAmount: 2700000,
     dueDate: "2026-06-05",
     status: "Paid",
+    whatsappStatus: "Dibaca",
+    whatsappSentAt: "2026-06-01T07:15:00Z",
+    whatsappPhone: "081234567890",
     createdAt: "2026-06-01T07:00:00Z"
   },
   {
@@ -436,6 +440,9 @@ export const INITIAL_INVOICES: Invoice[] = [
     totalAmount: 19543500,
     dueDate: "2026-06-15",
     status: "Paid",
+    whatsappStatus: "Terkirim",
+    whatsappSentAt: "2026-06-01T07:22:00Z",
+    whatsappPhone: "081987654321",
     createdAt: "2026-06-01T07:10:00Z"
   },
   {
@@ -443,17 +450,53 @@ export const INITIAL_INVOICES: Invoice[] = [
     tenantId: "t-1",
     propertyId: "prop-2",
     unitId: "unit-k1",
-    invoiceNumber: "INV/PRO3/2026/07-001",
+    invoiceNumber: "INV/PRO3/2026/09-001",
     items: [
-      { id: "itm-6", description: "Tagihan Sewa Kamar Kost Room 01 (Juli 2026)", amount: 2500000 },
+      { id: "itm-6", description: "Tagihan Sewa Kamar Kost Room 01 (September 2026)", amount: 2500000 },
       { id: "itm-7", description: "Surcharge Utility Prabayar", amount: 100000 }
     ],
     subtotal: 2600000,
     tax: 0,
     totalAmount: 2600000,
-    dueDate: "2026-07-05",
+    dueDate: "2026-09-05",
     status: "Unpaid",
-    createdAt: "2026-06-20T08:00:00Z"
+    whatsappStatus: "Belum Terkirim",
+    createdAt: "2026-09-01T08:00:00Z"
+  },
+  {
+    id: "inv-204",
+    tenantId: "t-2",
+    propertyId: "prop-3",
+    unitId: "unit-apt12a",
+    invoiceNumber: "INV/PRO3/2026/09-002",
+    items: [
+      { id: "itm-8", description: "Sewa Unit Apartemen 12A-05 (September 2026)", amount: 18500000 },
+      { id: "itm-9", description: "IPL & Service Charge Kebersihan", amount: 850000 }
+    ],
+    subtotal: 19350000,
+    tax: 193500,
+    totalAmount: 19543500,
+    dueDate: "2026-09-05",
+    status: "Unpaid",
+    whatsappStatus: "Belum Terkirim",
+    createdAt: "2026-09-01T08:30:00Z"
+  }
+];
+
+export const INITIAL_SCHEDULER_LOGS: WhatsAppSchedulerLog[] = [
+  {
+    id: "sch-log-1",
+    invoiceId: "inv-201",
+    invoiceNumber: "INV/PRO3/2026/06-001",
+    tenantName: "Rian Aditya",
+    tenantPhone: "081234567890",
+    unitName: "Room 01",
+    amount: 2700000,
+    dueDate: "2026-06-05",
+    triggerType: "H-3 Reminder",
+    executedAt: "2026-06-02T09:00:15Z",
+    status: "Success",
+    messagePreview: "Halo Kak Rian Aditya, pengingat tagihan Rp 2.700.000 untuk Room 01 akan jatuh tempo dalam 3 hari (05 Jun 2026)..."
   }
 ];
 
@@ -656,52 +699,58 @@ export const INITIAL_LEADS: Lead[] = [
 
 export const INITIAL_CHAT_MESSAGES = [
   {
-    id: "chat-1",
+    id: "a0000001-0000-4000-8000-000000000001",
     senderName: "Budi Santoso",
     senderRole: "Owner",
     channel: "#umum",
     message: "Selamat pagi semua. Kanal chat kerja real-time sekarang sudah aktif untuk koordinasi kerja harian kita!",
-    createdAt: new Date(Date.now() - 3600000 * 48).toISOString()
+    createdAt: new Date(Date.now() - 3600000 * 48).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000 * 48).toISOString()
   },
   {
-    id: "chat-2",
+    id: "a0000001-0000-4000-8000-000000000002",
     senderName: "Dewi Lestari",
     senderRole: "Manager",
     channel: "#umum",
     message: "Terima kasih Pak Budi. Teman-teman staf lainnya, mohon lapor setiap perkembangan di lapangan melalui grup chat di bawah ini ya.",
-    createdAt: new Date(Date.now() - 3600000 * 47).toISOString()
+    createdAt: new Date(Date.now() - 3600000 * 47).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000 * 47).toISOString()
   },
   {
-    id: "chat-3",
+    id: "a0000001-0000-4000-8000-000000000003",
     senderName: "Rudi Tabuti",
     senderRole: "Staff Maintenance",
     channel: "#perbaikan-teknis",
     message: "Laporan: AC bocor di kamar 102 lantai 1 sudah selesai diperbaiki dan di-service freon-nya. Status kamar aman untuk disewakan kembali.",
-    createdAt: new Date(Date.now() - 3600000 * 12).toISOString()
+    createdAt: new Date(Date.now() - 3600000 * 12).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000 * 12).toISOString()
   },
   {
-    id: "chat-4",
+    id: "a0000001-0000-4000-8000-000000000004",
     senderName: "Siti Rahma",
     senderRole: "Finance",
     channel: "#keuangan-admin",
     message: "Tagihan sewa bulanan untuk Bapak Rian Hidayat (kamar 101) sudah lunas terkonfirmasi hari ini. Data billing di sistem sudah saya update.",
-    createdAt: new Date(Date.now() - 3600000 * 8).toISOString()
+    createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000 * 8).toISOString()
   },
   {
-    id: "chat-5",
+    id: "a0000001-0000-4000-8000-000000000005",
     senderName: "Anton Hartono",
     senderRole: "Receptionist",
     channel: "#penyewa-bantuan",
     message: "Tamu kamar 204 menanyakan tentang password wifi yang baru berjalan lambat. Apakah ada gangguan ISP?",
-    createdAt: new Date(Date.now() - 1800000).toISOString()
+    createdAt: new Date(Date.now() - 1800000).toISOString(),
+    updatedAt: new Date(Date.now() - 1800000).toISOString()
   },
   {
-    id: "chat-6",
+    id: "a0000001-0000-4000-8000-000000000006",
     senderName: "Dewi Lestari",
     senderRole: "Manager",
     channel: "#penyewa-bantuan",
     message: "Tadi server pusat ISP menginfokan perbaikan link kabel utama. Estimasi bandwith kembali normal 10 menit lagi ya Anton.",
-    createdAt: new Date(Date.now() - 900000).toISOString()
+    createdAt: new Date(Date.now() - 900000).toISOString(),
+    updatedAt: new Date(Date.now() - 900000).toISOString()
   }
 ];
 

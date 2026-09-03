@@ -31,7 +31,8 @@ import {
   Trash2,
   Plus,
   Calendar,
-  Bell
+  Bell,
+  BookOpen
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -75,7 +76,9 @@ import {
   loadAllFromSupabase,
   upsertToSupabase,
   deleteFromSupabase,
-  pushAllToSupabase
+  pushAllToSupabase,
+  subscribeToWorkChats,
+  supabase
 } from "./lib/supabase";
 import { Database } from "lucide-react";
 
@@ -94,6 +97,7 @@ import WorkChatModule, { ROLE_NAMES } from "./components/WorkChatModule";
 import CalendarRapatModule from "./components/CalendarRapatModule";
 import HRISModule from "./components/HRISModule";
 import RoleAccountsModule, { RoleCredential } from "./components/RoleAccountsModule";
+import RulesAndSopModule from "./components/RulesAndSopModule";
 
 export default function App() {
   // Default and saved multi-role credentials config
@@ -254,6 +258,17 @@ export default function App() {
   useEffect(() => {
     if (isSupabaseConfigured()) {
       loadDataFromSupabase();
+      const channel = subscribeToWorkChats((incomingMsg) => {
+        setChatMessages((prev) => {
+          if (prev.some((m) => m.id === incomingMsg.id)) return prev;
+          return [...prev, incomingMsg];
+        });
+      });
+      return () => {
+        if (channel && supabase) {
+          supabase.removeChannel(channel);
+        }
+      };
     }
   }, []);
 
@@ -531,6 +546,11 @@ export default function App() {
     saveToCloud("invoices", inv);
   };
 
+  const handleUpdateInvoice = (inv: Invoice) => {
+    setInvoices(invoices.map(i => i.id === inv.id ? inv : i));
+    saveToCloud("invoices", inv);
+  };
+
   const handleUpdateInvoiceStatus = (id: string, status: any) => {
     const updatedInvs = invoices.map(i => {
       if (i.id === id) {
@@ -604,7 +624,7 @@ export default function App() {
     if (tab === "hris") {
       return activeRole === "Super Admin" || activeRole === "HR";
     }
-    if (tab === "workchat" || tab === "calendar-rapat") return true;
+    if (tab === "workchat" || tab === "calendar-rapat" || tab === "rules-sop") return true;
     if (activeRole === "Super Admin" || activeRole === "Owner") return true;
 
     switch (activeRole) {
@@ -647,6 +667,7 @@ export default function App() {
     { id: "cleaning", label: "Housekeeping", icon: Sparkles },
     { id: "crm", label: "Sales & CRM", icon: Award },
     { id: "contracts", label: "Kontrak Digital", icon: FileCheck },
+    { id: "rules-sop", label: "Tata Tertib & SOP", icon: BookOpen },
     { id: "hris", label: "Human Resource", icon: Briefcase },
     { id: "role-accounts", label: "Akses & Akun Role", icon: Lock }
   ];
@@ -1283,10 +1304,12 @@ export default function App() {
                     tenants={tenants}
                     properties={properties}
                     units={units}
+                    reservations={reservations}
                     maintenance={maintenance}
                     payroll={payroll}
                     employees={employees}
                     onAddInvoice={handleAddInvoice}
+                    onUpdateInvoice={handleUpdateInvoice}
                     onAddPayment={handleAddPayment}
                     onAddExpense={handleAddExpense}
                     onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
@@ -1328,6 +1351,13 @@ export default function App() {
                     units={units}
                     properties={properties}
                     onAddContract={handleAddContract}
+                  />
+                )}
+
+                {activeTab === "rules-sop" && isTabAvailable("rules-sop") && (
+                  <RulesAndSopModule
+                    properties={properties}
+                    currentRole={activeRole}
                   />
                 )}
 

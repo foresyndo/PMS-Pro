@@ -2,25 +2,31 @@ import { createClient } from "@supabase/supabase-js";
 import { Property, Unit, Tenant, Reservation, Contract, Invoice, Expense, MaintenanceTicket, PaymentLog, WorkChatMessage } from "../types";
 
 // Read environment variables
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "";
+const rawSupabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || "";
+export const normalizeSupabaseUrl = (raw: string) => {
+  if (!raw || typeof raw !== "string") return "";
+  let u = raw.trim();
+  if (u.startsWith("//")) u = "https:" + u;
+  else if (!u.startsWith("http://") && !u.startsWith("https://")) u = "https://" + u;
+  if (u.endsWith("/")) u = u.slice(0, -1);
+  return u;
+};
+
+const supabaseUrl = normalizeSupabaseUrl(rawSupabaseUrl);
+const supabaseAnonKey = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "").trim();
 
 export const isSupabaseConfigured = () => {
-  if (!supabaseUrl || typeof supabaseUrl !== "string") return false;
-  if (!supabaseAnonKey || typeof supabaseAnonKey !== "string") return false;
+  if (!supabaseUrl || !supabaseAnonKey) return false;
 
-  const url = supabaseUrl.trim();
-  const key = supabaseAnonKey.trim();
+  const isUrlValid = (supabaseUrl.startsWith("http://") || supabaseUrl.startsWith("https://")) &&
+    !supabaseUrl.includes("MY_SUPABASE") &&
+    !supabaseUrl.includes("YOUR_SUPABASE") &&
+    !supabaseUrl.includes("your-supabase");
 
-  const isUrlValid = (url.startsWith("http://") || url.startsWith("https://")) &&
-    !url.includes("MY_SUPABASE") &&
-    !url.includes("YOUR_SUPABASE") &&
-    !url.includes("your-supabase");
-
-  const isKeyValid = !key.includes("MY_KEY") &&
-    !key.includes("YOUR_ANON") &&
-    !key.includes("your-anon") &&
-    key !== "";
+  const isKeyValid = !supabaseAnonKey.includes("MY_KEY") &&
+    !supabaseAnonKey.includes("YOUR_ANON") &&
+    !supabaseAnonKey.includes("your-anon") &&
+    supabaseAnonKey !== "";
 
   return !!(isUrlValid && isKeyValid);
 };
@@ -159,15 +165,37 @@ CREATE TABLE IF NOT EXISTS payment_logs (
   proof_url TEXT
 );
 
--- 10. Tabel Work Chats
-CREATE TABLE IF NOT EXISTS work_chats (
-  id TEXT PRIMARY KEY,
+-- 10. Tabel Work Chats (public.work_chats)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS public.work_chats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sender_name TEXT NOT NULL,
   sender_role TEXT NOT NULL,
   channel TEXT NOT NULL,
   message TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+CREATE INDEX IF NOT EXISTS idx_work_chats_channel ON public.work_chats (channel);
+CREATE INDEX IF NOT EXISTS idx_work_chats_created_at ON public.work_chats (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_work_chats_user_id ON public.work_chats (user_id);
+
+CREATE OR REPLACE FUNCTION public.set_work_chats_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = timezone('utc'::text, now());
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_work_chats_updated_at ON public.work_chats;
+CREATE TRIGGER trg_work_chats_updated_at
+  BEFORE UPDATE ON public.work_chats
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_work_chats_updated_at();
 
 -- 11. Tabel Role Credentials (Daftar User)
 CREATE TABLE IF NOT EXISTS role_credentials (
@@ -176,7 +204,7 @@ CREATE TABLE IF NOT EXISTS role_credentials (
   passport TEXT NOT NULL
 );
 
--- Aktifkan Row Level Security (RLS) tapi izinkan akses anonim demi kemudahan demo
+-- Aktifkan Row Level Security (RLS)
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE units ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
@@ -186,7 +214,7 @@ ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE maintenance_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE work_chats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.work_chats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE role_credentials ENABLE ROW LEVEL SECURITY;
 
 -- Kebijakan Akses Publik untuk kemudahan Integrasi Client Demo
@@ -199,8 +227,159 @@ CREATE POLICY "Akses Terbuka Invoices" ON invoices FOR ALL USING (true) WITH CHE
 CREATE POLICY "Akses Terbuka Expenses" ON expenses FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Akses Terbuka Maintenance Tickets" ON maintenance_tickets FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Akses Terbuka Payment Logs" ON payment_logs FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Akses Terbuka Work Chats" ON work_chats FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Akses Terbuka Role Credentials" ON role_credentials FOR ALL USING (true) WITH CHECK (true);
+
+-- Kebijakan RLS Khusus & Aman untuk public.work_chats
+DROP POLICY IF EXISTS "Allow reading work chats" ON public.work_chats;
+CREATE POLICY "Allow reading work chats"
+  ON public.work_chats
+  FOR SELECT
+  TO authenticated, anon
+  USING (
+    channel LIKE '#%'
+    OR channel NOT LIKE 'dm-%'
+    OR auth.uid() = user_id
+    OR user_id IS NULL
+  );
+
+DROP POLICY IF EXISTS "Allow inserting work chats" ON public.work_chats;
+CREATE POLICY "Allow inserting work chats"
+  ON public.work_chats
+  FOR INSERT
+  TO authenticated, anon
+  WITH CHECK (
+    (auth.uid() IS NOT NULL AND (user_id = auth.uid() OR user_id IS NULL))
+    OR (auth.uid() IS NULL)
+  );
+
+DROP POLICY IF EXISTS "Allow updating own work chats" ON public.work_chats;
+CREATE POLICY "Allow updating own work chats"
+  ON public.work_chats
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Allow deleting own work chats" ON public.work_chats;
+CREATE POLICY "Allow deleting own work chats"
+  ON public.work_chats
+  FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- Publikasi Supabase Realtime untuk public.work_chats
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'work_chats'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.work_chats;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END;
+$$;
+`;
+};
+
+// Dedicated SQL Migration for public.work_chats
+export const getWorkChatsMigrationSQL = () => {
+  return `-- ==========================================================
+-- MIGRATION: public.work_chats
+-- Deskripsi: Membuat tabel public.work_chats dengan UUID primary key,
+-- foreign key user_id ke auth.users, indexes, trigger updated_at,
+-- RLS policies aman, dan supabase_realtime publication.
+-- ==========================================================
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS public.work_chats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_name TEXT NOT NULL,
+  sender_role TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  message TEXT NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_work_chats_channel ON public.work_chats (channel);
+CREATE INDEX IF NOT EXISTS idx_work_chats_created_at ON public.work_chats (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_work_chats_user_id ON public.work_chats (user_id);
+
+CREATE OR REPLACE FUNCTION public.set_work_chats_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = timezone('utc'::text, now());
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_work_chats_updated_at ON public.work_chats;
+CREATE TRIGGER trg_work_chats_updated_at
+  BEFORE UPDATE ON public.work_chats
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_work_chats_updated_at();
+
+ALTER TABLE public.work_chats ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow reading work chats" ON public.work_chats;
+CREATE POLICY "Allow reading work chats"
+  ON public.work_chats
+  FOR SELECT
+  TO authenticated, anon
+  USING (
+    channel LIKE '#%'
+    OR channel NOT LIKE 'dm-%'
+    OR auth.uid() = user_id
+    OR user_id IS NULL
+  );
+
+DROP POLICY IF EXISTS "Allow inserting work chats" ON public.work_chats;
+CREATE POLICY "Allow inserting work chats"
+  ON public.work_chats
+  FOR INSERT
+  TO authenticated, anon
+  WITH CHECK (
+    (auth.uid() IS NOT NULL AND (user_id = auth.uid() OR user_id IS NULL))
+    OR (auth.uid() IS NULL)
+  );
+
+DROP POLICY IF EXISTS "Allow updating own work chats" ON public.work_chats;
+CREATE POLICY "Allow updating own work chats"
+  ON public.work_chats
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Allow deleting own work chats" ON public.work_chats;
+CREATE POLICY "Allow deleting own work chats"
+  ON public.work_chats
+  FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'work_chats'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.work_chats;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END;
+$$;
 `;
 };
 
@@ -269,7 +448,18 @@ export const loadAllFromSupabase = async () => {
 
   for (const t of tables) {
     try {
-      const { data, error } = await supabase.from(t.table).select("*");
+      let { data, error } = await supabase.from(t.table).select("*");
+      if (error && t.table === "work_chats") {
+        try {
+          const fallbackRes = await fetch("/rest/v1/work_chats?select=*");
+          if (fallbackRes.ok) {
+            data = await fallbackRes.json();
+            error = null;
+          }
+        } catch (e) {
+          // ignore fallback error
+        }
+      }
       if (error) {
         results.tablesStatus[t.table] = false;
         console.warn(`Failed to fetch ${t.table}:`, error.message);
@@ -376,3 +566,27 @@ export const pushAllToSupabase = async (payload: {
 
   return { success: overallSuccess, results };
 };
+
+// Realtime subscription for work_chats
+export const subscribeToWorkChats = (onInsert: (msg: WorkChatMessage) => void) => {
+  if (!supabase) return null;
+  try {
+    const channel = supabase
+      .channel("work_chats_realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "work_chats" },
+        (payload: any) => {
+          if (payload.new) {
+            onInsert(fromDbRow(payload.new) as WorkChatMessage);
+          }
+        }
+      )
+      .subscribe();
+    return channel;
+  } catch (err) {
+    console.warn("Could not subscribe to work_chats realtime:", err);
+    return null;
+  }
+};
+

@@ -19,9 +19,35 @@ import {
   AlertCircle,
   Mail,
   Send,
-  Loader2
+  Loader2,
+  MessageCircle,
+  Check,
+  CheckCheck,
+  Clock,
+  ExternalLink,
+  Search,
+  Filter,
+  RefreshCw,
+  Play,
+  Pause,
+  Settings,
+  Bell,
+  Zap,
+  CheckCircle2,
+  ListChecks,
+  History,
+  Sparkles,
+  CalendarClock,
+  Copy,
+  Info,
+  SendHorizontal,
+  ShieldCheck,
+  X,
+  Building,
+  BedDouble
 } from "lucide-react";
-import { Invoice, PaymentLog, Expense, Tenant, Property, Unit, PaymentMethod, PaymentStatus, ExpenseCategory, MaintenanceTicket, Payroll, Employee } from "../types";
+import { Invoice, PaymentLog, Expense, Tenant, Property, Unit, PaymentMethod, PaymentStatus, WhatsAppStatus, WhatsAppSchedulerConfig, WhatsAppSchedulerLog, ExpenseCategory, MaintenanceTicket, Payroll, Employee, Reservation } from "../types";
+import { INITIAL_SCHEDULER_LOGS, INITIAL_RESERVATIONS } from "../data";
 
 interface FinanceModuleProps {
   invoices: Invoice[];
@@ -30,10 +56,13 @@ interface FinanceModuleProps {
   tenants: Tenant[];
   properties: Property[];
   units: Unit[];
+  reservations?: Reservation[];
+  bookings?: Reservation[];
   maintenance?: MaintenanceTicket[];
   payroll?: Payroll[];
   employees?: Employee[];
   onAddInvoice: (inv: Invoice) => void;
+  onUpdateInvoice?: (inv: Invoice) => void;
   onAddPayment: (pay: PaymentLog) => void;
   onAddExpense: (exp: Expense) => void;
   onUpdateInvoiceStatus: (id: string, status: PaymentStatus) => void;
@@ -49,10 +78,13 @@ export default function FinanceModule({
   tenants,
   properties,
   units,
+  reservations,
+  bookings,
   maintenance = [],
   payroll = [],
   employees = [],
   onAddInvoice,
+  onUpdateInvoice,
   onAddPayment,
   onAddExpense,
   onUpdateInvoiceStatus,
@@ -60,7 +92,40 @@ export default function FinanceModule({
   prefilledUnitId,
   onClearPrefill
 }: FinanceModuleProps) {
+  // Consolidated list of reservations / bookings
+  const allReservations: Reservation[] = (reservations && reservations.length > 0)
+    ? reservations
+    : ((bookings && bookings.length > 0) ? bookings : INITIAL_RESERVATIONS);
+
   const [activeTab, setActiveTab] = useState<"invoices" | "expenses" | "reports" | "approvals">("invoices");
+  
+  // WhatsApp Status Filter & Search States
+  const [waStatusFilter, setWaStatusFilter] = useState<"ALL" | WhatsAppStatus>("ALL");
+  const [invoiceSearch, setInvoiceSearch] = useState<string>("");
+  const [dueFilter, setDueFilter] = useState<"ALL" | "H3" | "APPROACHING" | "OVERDUE">("ALL");
+  const [selectedWaModalInvoice, setSelectedWaModalInvoice] = useState<Invoice | null>(null);
+  const [customWaPhone, setCustomWaPhone] = useState<string>("");
+  const [customWaNote, setCustomWaNote] = useState<string>("");
+  const [waToast, setWaToast] = useState<{ show: boolean; message: string; type: "success" | "info" } | null>(null);
+
+  // WhatsApp H-3 Automated Scheduler Config & States
+  const [schedulerConfig, setSchedulerConfig] = useState<WhatsAppSchedulerConfig>({
+    isEnabled: true,
+    daysBeforeDue: 3, // H-3
+    scheduledTime: "09:00",
+    targetStatus: ["Unpaid", "Overdue"],
+    autoMarkSent: true,
+    customTemplate: `Halo Kak *{tenantName}* 👋\n\nKami menginformasikan bahwa tagihan sewa properti *{propertyName}* - *Kamar {unitNumber}* akan jatuh tempo dalam *{daysLeftText}* (pada *{dueDate}*).\n\n📄 *No. Invoice:* {invoiceNumber}\n💰 *Total Tagihan:* *{totalAmount}*\n\n*Rincian Tagihan:*\n{itemsList}\n\nMohon lakukan pembayaran sebelum tanggal jatuh tempo. Jika sudah melakukan pembayaran, konfirmasi bukti transfer dapat dikirimkan ke nomor ini. Terima kasih! 🙏`
+  });
+
+  const [schedulerLogs, setSchedulerLogs] = useState<WhatsAppSchedulerLog[]>(INITIAL_SCHEDULER_LOGS);
+  const [showSchedulerConfigModal, setShowSchedulerConfigModal] = useState<boolean>(false);
+  const [showSchedulerLogsModal, setShowSchedulerLogsModal] = useState<boolean>(false);
+  const [showBatchExecuteModal, setShowBatchExecuteModal] = useState<boolean>(false);
+  const [isExecutingScheduler, setIsExecutingScheduler] = useState<boolean>(false);
+  const [schedulerProgress, setSchedulerProgress] = useState<{ step: number; total: number; currentName: string } | null>(null);
+  const [schedulerBatchResults, setSchedulerBatchResults] = useState<{ processed: WhatsAppSchedulerLog[]; timestamp: string } | null>(null);
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
   
   // Dispatched email states for automated invoice trigger
   const [dispatchedEmails, setDispatchedEmails] = useState<any[]>([
@@ -94,6 +159,27 @@ export default function FinanceModule({
   const [payrollToConfirm, setPayrollToConfirm] = useState<Payroll | null>(null);
   const [showPayrollSuccessModal, setShowPayrollSuccessModal] = useState<boolean>(false);
   const [lastTransferredPayroll, setLastTransferredPayroll] = useState<{ empName: string; amount: number; month: string } | null>(null);
+
+  // Booking Invoice PDF Generator States
+  const [showBookingInvoiceModal, setShowBookingInvoiceModal] = useState<boolean>(false);
+  const [selectedBookingTenantId, setSelectedBookingTenantId] = useState<string>(tenants[0]?.id || "");
+  const [selectedBookingReservationId, setSelectedBookingReservationId] = useState<string>("");
+  const [bookingInvoiceIncludeDeposit, setBookingInvoiceIncludeDeposit] = useState<boolean>(true);
+  const [bookingInvoiceTaxPercent, setBookingInvoiceTaxPercent] = useState<number>(1);
+  const [bookingInvoiceCustomNotes, setBookingInvoiceCustomNotes] = useState<string>("");
+  const [isGeneratingBookingPdf, setIsGeneratingBookingPdf] = useState<boolean>(false);
+
+  // Auto-sync reservation selection when tenant changes
+  React.useEffect(() => {
+    if (selectedBookingTenantId) {
+      const tenantRes = allReservations.find(r => r.tenantId === selectedBookingTenantId);
+      if (tenantRes) {
+        setSelectedBookingReservationId(tenantRes.id);
+      } else {
+        setSelectedBookingReservationId(allReservations[0]?.id || "");
+      }
+    }
+  }, [selectedBookingTenantId, allReservations]);
 
   // New Invoice Input States
   const [tenantId, setTenantId] = useState(tenants[0]?.id || "");
@@ -159,17 +245,289 @@ export default function FinanceModule({
     }).format(num);
   };
 
+  // Format timestamp for WhatsApp delivery history
+  const formatWhatsAppTimestamp = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      }) + " WIB";
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // WhatsApp send handler
+  const handleSendWhatsApp = (inv: Invoice, overridePhone?: string, overrideNote?: string) => {
+    const tenant = tenants.find(t => t.id === inv.tenantId);
+    const property = properties.find(p => p.id === inv.propertyId);
+    const unit = units.find(u => u.id === inv.unitId);
+    
+    let rawPhone = overridePhone || inv.whatsappPhone || tenant?.phone || "";
+    let cleanPhone = rawPhone.replace(/\D/g, "");
+    if (cleanPhone.startsWith("0")) {
+      cleanPhone = "62" + cleanPhone.slice(1);
+    } else if (!cleanPhone.startsWith("62") && cleanPhone.length > 0) {
+      cleanPhone = "62" + cleanPhone;
+    }
+
+    if (!cleanPhone || cleanPhone.length < 8) {
+      alert(`Nomor WhatsApp untuk tenant "${tenant?.name || 'ini'}" belum valid. Silakan masukkan nomor WhatsApp yang benar.`);
+      return;
+    }
+
+    const itemsText = inv.items.map(it => `• ${it.description}: ${formatIDR(it.amount)}`).join("\n");
+    const text = `Halo Kak *${tenant?.name || 'Penyewa'}* 👋\n\nBerikut kami sampaikan rincian tagihan sewa properti *${property?.name || 'Properti'}* - *Kamar ${unit?.unitNumber || '-'}*:\n\n📄 *No. Invoice:* ${inv.invoiceNumber}\n📅 *Jatuh Tempo:* ${inv.dueDate}\n💰 *Total Tagihan:* *${formatIDR(inv.totalAmount)}*\n\n*Rincian Tagihan:*\n${itemsText}\n\n${overrideNote ? `${overrideNote}\n\n` : ''}Mohon lakukan pembayaran sebelum tanggal jatuh tempo. Konfirmasi bukti pembayaran dapat dikirimkan ke nomor ini. Terima kasih! 🙏`;
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, "_blank");
+
+    const nowIso = new Date().toISOString();
+    const updatedInv: Invoice = {
+      ...inv,
+      whatsappStatus: "Terkirim",
+      whatsappSentAt: nowIso,
+      whatsappPhone: cleanPhone
+    };
+
+    if (onUpdateInvoice) {
+      onUpdateInvoice(updatedInv);
+    }
+
+    setWaToast({
+      show: true,
+      message: `Pesan WhatsApp dibuka & status tagihan ${inv.invoiceNumber} diubah ke 'Terkirim'`,
+      type: "success"
+    });
+    setTimeout(() => setWaToast(null), 3500);
+
+    if (selectedWaModalInvoice?.id === inv.id) {
+      setSelectedWaModalInvoice(null);
+    }
+  };
+
+  // Manual WhatsApp Status updater
+  const handleUpdateWhatsAppStatus = (inv: Invoice, newStatus: WhatsAppStatus) => {
+    const updatedInv: Invoice = {
+      ...inv,
+      whatsappStatus: newStatus,
+      whatsappSentAt: newStatus === "Belum Terkirim" ? undefined : (inv.whatsappSentAt || new Date().toISOString())
+    };
+
+    if (onUpdateInvoice) {
+      onUpdateInvoice(updatedInv);
+    }
+
+    setWaToast({
+      show: true,
+      message: `Status WhatsApp ${inv.invoiceNumber} diperbarui menjadi '${newStatus}'`,
+      type: "info"
+    });
+    setTimeout(() => setWaToast(null), 3000);
+  };
+
+  // Calculate relative days until due date (relative to anchor date 2026-09-02 or local date)
+  const getDaysUntilDue = (dueDateStr: string): number => {
+    if (!dueDateStr) return 999;
+    try {
+      const refDate = new Date("2026-09-02T00:00:00Z");
+      const due = new Date(dueDateStr + "T00:00:00Z");
+      const diffTime = due.getTime() - refDate.getTime();
+      return Math.round(diffTime / (1000 * 60 * 60 * 24));
+    } catch {
+      return 999;
+    }
+  };
+
+  // Get due badge information
+  const getDueBadge = (dueDateStr: string, status: PaymentStatus) => {
+    if (status === "Paid") return null;
+    const days = getDaysUntilDue(dueDateStr);
+    if (days < 0) {
+      return {
+        label: `Terlambat ${Math.abs(days)} Hari`,
+        bg: "bg-rose-100 text-rose-800 border-rose-200",
+        isH3: false,
+        isOverdue: true
+      };
+    }
+    if (days === 0) {
+      return {
+        label: "Hari H Jatuh Tempo",
+        bg: "bg-red-100 text-red-800 border-red-300 font-extrabold",
+        isH3: false,
+        isOverdue: false
+      };
+    }
+    if (days === 3) {
+      return {
+        label: "🚨 H-3 Pengingat",
+        bg: "bg-amber-100 text-amber-900 border-amber-300 font-extrabold shadow-xs",
+        isH3: true,
+        isOverdue: false
+      };
+    }
+    if (days === 1) {
+      return {
+        label: "⚠️ H-1 Besok",
+        bg: "bg-orange-100 text-orange-900 border-orange-300 font-bold",
+        isH3: false,
+        isOverdue: false
+      };
+    }
+    if (days === 2) {
+      return {
+        label: "⏳ H-2 Lusa",
+        bg: "bg-amber-50 text-amber-800 border-amber-200 font-semibold",
+        isH3: false,
+        isOverdue: false
+      };
+    }
+    if (days <= 7) {
+      return {
+        label: `H-${days}`,
+        bg: "bg-blue-50 text-blue-700 border-blue-200 font-medium",
+        isH3: false,
+        isOverdue: false
+      };
+    }
+    return {
+      label: `H-${days}`,
+      bg: "bg-slate-100 text-slate-600 border-slate-200",
+      isH3: false,
+      isOverdue: false
+    };
+  };
+
+  // Format WhatsApp reminder template text
+  const buildWhatsAppReminderText = (inv: Invoice, customNote?: string) => {
+    const tenant = tenants.find(t => t.id === inv.tenantId);
+    const property = properties.find(p => p.id === inv.propertyId);
+    const unit = units.find(u => u.id === inv.unitId);
+    const days = getDaysUntilDue(inv.dueDate);
+    const daysText = days === 0 ? "Hari Ini" : days > 0 ? `${days} hari lagi (H-${days})` : `sudah lewat ${Math.abs(days)} hari`;
+    
+    const itemsText = inv.items.map(it => `• ${it.description}: ${formatIDR(it.amount)}`).join("\n");
+    
+    let msg = (schedulerConfig.customTemplate || "")
+      .replace(/{tenantName}/g, tenant?.name || "Penyewa")
+      .replace(/{propertyName}/g, property?.name || "Properti")
+      .replace(/{unitNumber}/g, unit?.unitNumber || "-")
+      .replace(/{invoiceNumber}/g, inv.invoiceNumber)
+      .replace(/{totalAmount}/g, formatIDR(inv.totalAmount))
+      .replace(/{dueDate}/g, inv.dueDate)
+      .replace(/{daysLeftText}/g, daysText)
+      .replace(/{itemsList}/g, itemsText);
+
+    if (customNote) {
+      msg += `\n\n📌 *Catatan Khusus:*\n${customNote}`;
+    }
+    return msg;
+  };
+
+  // Automated Batch Execution Method
+  const handleExecuteSchedulerBatch = async (targetInvoices?: Invoice[]) => {
+    const targets = targetInvoices || invoices.filter(inv => {
+      if (inv.status !== "Unpaid" && inv.status !== "Overdue") return false;
+      const days = getDaysUntilDue(inv.dueDate);
+      return days <= schedulerConfig.daysBeforeDue && days >= 0;
+    });
+
+    if (targets.length === 0) {
+      setWaToast({
+        show: true,
+        message: `Tidak ada tagihan belum lunas dalam rentang H-${schedulerConfig.daysBeforeDue} saat ini.`,
+        type: "info"
+      });
+      setTimeout(() => setWaToast(null), 3000);
+      return;
+    }
+
+    setIsExecutingScheduler(true);
+    setShowBatchExecuteModal(true);
+    setSchedulerProgress({ step: 0, total: targets.length, currentName: "Memulai scheduler..." });
+
+    const newLogs: WhatsAppSchedulerLog[] = [];
+    const nowIso = new Date().toISOString();
+
+    for (let i = 0; i < targets.length; i++) {
+      const inv = targets[i];
+      const tenant = tenants.find(t => t.id === inv.tenantId);
+      const unit = units.find(u => u.id === inv.unitId);
+      const days = getDaysUntilDue(inv.dueDate);
+      const trigType: WhatsAppSchedulerLog["triggerType"] = days === 3 ? "H-3 Reminder" : days === 1 ? "H-1 Reminder" : days === 7 ? "H-7 Reminder" : "Manual Batch";
+      
+      let rawPhone = inv.whatsappPhone || tenant?.phone || "";
+      let cleanPhone = rawPhone.replace(/\D/g, "");
+      if (cleanPhone.startsWith("0")) cleanPhone = "62" + cleanPhone.slice(1);
+      else if (!cleanPhone.startsWith("62") && cleanPhone.length > 0) cleanPhone = "62" + cleanPhone;
+
+      const msg = buildWhatsAppReminderText(inv);
+
+      const logEntry: WhatsAppSchedulerLog = {
+        id: `sch-log-${Date.now()}-${i}`,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        tenantName: tenant?.name || "Penyewa",
+        tenantPhone: cleanPhone || tenant?.phone || "-",
+        unitName: `Kamar ${unit?.unitNumber || "-"}`,
+        amount: inv.totalAmount,
+        dueDate: inv.dueDate,
+        triggerType: trigType,
+        executedAt: nowIso,
+        status: cleanPhone.length >= 8 ? "Success" : "Failed",
+        messagePreview: msg
+      };
+
+      newLogs.unshift(logEntry);
+
+      if (schedulerConfig.autoMarkSent) {
+        const updatedInv: Invoice = {
+          ...inv,
+          whatsappStatus: cleanPhone.length >= 8 ? "Terkirim" : "Gagal",
+          whatsappSentAt: nowIso,
+          whatsappPhone: cleanPhone || inv.whatsappPhone
+        };
+        if (onUpdateInvoice) {
+          onUpdateInvoice(updatedInv);
+        }
+      }
+
+      setSchedulerProgress({ step: i + 1, total: targets.length, currentName: `${tenant?.name || 'Tenant'} (${inv.invoiceNumber})` });
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+
+    setSchedulerLogs(prev => [...newLogs, ...prev]);
+    setIsExecutingScheduler(false);
+    setSchedulerBatchResults({ processed: newLogs, timestamp: nowIso });
+
+    setWaToast({
+      show: true,
+      message: `Berhasil mengeksekusi scheduler pengingat WhatsApp H-${schedulerConfig.daysBeforeDue} untuk ${targets.length} tagihan!`,
+      type: "success"
+    });
+    setTimeout(() => setWaToast(null), 4000);
+  };
+
   const currentPropertyUnits = units.filter(u => u.propertyId === propId);
 
   // Trigger Excel/CSV Download
   const downloadInvoicesCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Nomor Invoice,Penyewa,Unit,Total Tagihan,Tanggal Jatuh Tempo,Status\n";
+    csvContent += "Nomor Invoice,Penyewa,Unit,Total Tagihan,Tanggal Jatuh Tempo,Status Pembayaran,Status WhatsApp,Waktu Kirim WA\n";
     
     invoices.forEach((inv) => {
       const tenantName = tenants.find(t => t.id === inv.tenantId)?.name || "N/A";
       const unitNumber = units.find(u => u.id === inv.unitId)?.unitNumber || "N/A";
-      csvContent += `"${inv.invoiceNumber}","${tenantName}","Room ${unitNumber}",${inv.totalAmount},"${inv.dueDate}","${inv.status}"\n`;
+      const waStatus = inv.whatsappStatus || "Belum Terkirim";
+      const waSent = inv.whatsappSentAt ? formatWhatsAppTimestamp(inv.whatsappSentAt) : "-";
+      csvContent += `"${inv.invoiceNumber}","${tenantName}","Room ${unitNumber}",${inv.totalAmount},"${inv.dueDate}","${inv.status}","${waStatus}","${waSent}"\n`;
     });
 
     const encodedUri = encodeURI(csvContent);
@@ -179,6 +537,489 @@ export default function FinanceModule({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  /**
+   * Generates and downloads a formatted PDF invoice for a selected tenant based on their booking details.
+   */
+  const generateAndDownloadBookingInvoicePDF = (
+    optionsOrTenantId: {
+      tenantId: string;
+      reservationId?: string;
+      invoiceNumber?: string;
+      dueDate?: string;
+      customNotes?: string;
+      taxPercentage?: number;
+      includeDeposit?: boolean;
+      customItems?: { description: string; amount: number }[];
+      paymentStatus?: PaymentStatus;
+    } | string,
+    optionalReservationId?: string
+  ) => {
+    // 1. Resolve arguments
+    let targetTenantId: string;
+    let targetReservationId: string | undefined;
+    let customInvoiceNumber: string | undefined;
+    let customDueDate: string | undefined;
+    let customNotes: string | undefined;
+    let taxPercentage = 1;
+    let includeDeposit = true;
+    let customItems: { description: string; amount: number }[] | undefined;
+    let explicitStatus: PaymentStatus | undefined;
+
+    if (typeof optionsOrTenantId === "string") {
+      targetTenantId = optionsOrTenantId;
+      targetReservationId = optionalReservationId;
+    } else {
+      targetTenantId = optionsOrTenantId.tenantId;
+      targetReservationId = optionsOrTenantId.reservationId;
+      customInvoiceNumber = optionsOrTenantId.invoiceNumber;
+      customDueDate = optionsOrTenantId.dueDate;
+      customNotes = optionsOrTenantId.customNotes;
+      taxPercentage = optionsOrTenantId.taxPercentage ?? 1;
+      includeDeposit = optionsOrTenantId.includeDeposit ?? true;
+      customItems = optionsOrTenantId.customItems;
+      explicitStatus = optionsOrTenantId.paymentStatus;
+    }
+
+    // 2. Lookup Tenant
+    const tenant = tenants.find(t => t.id === targetTenantId) || tenants[0];
+    if (!tenant) {
+      alert("Data tenant tidak ditemukan.");
+      return;
+    }
+
+    // 3. Lookup Reservation / Booking
+    let reservation = targetReservationId
+      ? allReservations.find(r => r.id === targetReservationId)
+      : allReservations.find(r => r.tenantId === tenant.id);
+
+    if (!reservation) {
+      reservation = allReservations.find(r => r.tenantId === tenant.id) || allReservations[0];
+    }
+
+    // 4. Lookup Property & Unit
+    const unit = units.find(u => u.id === reservation?.unitId) || units[0];
+    const property = properties.find(p => p.id === (reservation?.propertyId || unit?.propertyId)) || properties[0];
+
+    // 5. Calculate Dates & Stay Duration
+    const checkIn = reservation?.checkInDate || "2026-06-01";
+    const checkOut = reservation?.checkOutDate || "2026-12-31";
+    const checkInD = new Date(checkIn);
+    const checkOutD = new Date(checkOut);
+    const diffTime = Math.abs(checkOutD.getTime() - checkInD.getTime());
+    const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    
+    let stayDurationLabel = `${diffDays} Hari`;
+    if (diffDays >= 28) {
+      const approxMonths = Math.round(diffDays / 30);
+      stayDurationLabel = `${approxMonths} Bulan (${diffDays} Hari)`;
+    }
+
+    // 6. Build Financial Lines
+    const baseRentAmount = reservation?.totalPrice 
+      ? Math.max(0, reservation.totalPrice - (includeDeposit ? (reservation.deposit || 0) : 0))
+      : (unit?.price || 2500000);
+    const depositAmount = includeDeposit ? (reservation?.deposit || 1000000) : 0;
+
+    let itemsToBill: { description: string; qty: string; rate: number; total: number }[] = [];
+
+    if (customItems && customItems.length > 0) {
+      itemsToBill = customItems.map(ci => ({
+        description: ci.description,
+        qty: "1 Paket",
+        rate: ci.amount,
+        total: ci.amount
+      }));
+    } else {
+      itemsToBill.push({
+        description: `Biaya Sewa Kamar: ${unit?.type || "Unit"} (Room ${unit?.unitNumber || "N/A"})`,
+        qty: stayDurationLabel,
+        rate: baseRentAmount,
+        total: baseRentAmount
+      });
+
+      if (depositAmount > 0) {
+        itemsToBill.push({
+          description: "Uang Jaminan / Security Deposit (Dapat dikembalikan saat check-out)",
+          qty: "1 Kali",
+          rate: depositAmount,
+          total: depositAmount
+        });
+      }
+
+      if (property?.type === "Kost" || property?.type === "Hotel") {
+        itemsToBill.push({
+          description: "Iuran Pemeliharaan, Sampah, Utilitas Air & Akses Fasilitas Bersama",
+          qty: "Include",
+          rate: 0,
+          total: 0
+        });
+      }
+    }
+
+    const subtotal = itemsToBill.reduce((sum, it) => sum + it.total, 0);
+    const taxAmount = Math.round((subtotal - depositAmount) * (taxPercentage / 100));
+    const totalAmount = subtotal + taxAmount;
+
+    const paymentStatus: PaymentStatus = explicitStatus || reservation?.paymentStatus || "Paid";
+    const invoiceNumber = customInvoiceNumber || `INV/BK/${property?.type?.substring(0, 3).toUpperCase() || "PMS"}/${new Date().getFullYear()}/${(reservation?.id || "RES101").toUpperCase().replace(/\D/g, "") || "901"}-${Math.floor(Math.random() * 899 + 100)}`;
+    const issueDate = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
+    const dueDateText = customDueDate || reservation?.checkInDate || new Date().toISOString().split("T")[0];
+
+    // 7. Create jsPDF Document
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    // Outer Decorative Border
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, 210, 297, "F");
+
+    // Header Background Card (Dark Slate Blue)
+    doc.setFillColor(15, 23, 42); // slate-900
+    doc.roundedRect(10, 10, 190, 32, 3, 3, "F");
+
+    // Emerald Top Accent Stripe
+    doc.setFillColor(16, 185, 129); // emerald-500
+    doc.rect(10, 10, 190, 2, "F");
+
+    // Brand Name
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(255, 255, 255);
+    doc.text("FORSDIG PMS PRO", 16, 22);
+
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(148, 163, 184); // slate-400
+    doc.text("PROPERTY MANAGEMENT & HOSPITALITY SYSTEM", 16, 27);
+    doc.text(`${property?.name || "Forsdig Residence Group"} • ${property?.address || "Indonesia"}`, 16, 31);
+    doc.text("Kontak Pengelola: +62 812-9988-7711 | finance@forsdigpms.pro", 16, 35);
+
+    // Invoice Header Right Side
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(52, 211, 153); // emerald-400
+    doc.text("BOOKING INVOICE", 194, 21, { align: "right" });
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 255, 255);
+    doc.text(`No: ${invoiceNumber}`, 194, 27, { align: "right" });
+
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(203, 213, 225);
+    doc.text(`Tgl Terbit: ${issueDate}`, 194, 32, { align: "right" });
+    doc.text(`Batas Tempo: ${dueDateText}`, 194, 36, { align: "right" });
+
+    // Status Banner / Ribbon
+    const bannerY = 46;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(10, bannerY, 190, 10, 2, 2, "FD");
+
+    // Status Pill
+    if (paymentStatus === "Paid") {
+      doc.setFillColor(209, 250, 229); // emerald-100
+      doc.setDrawColor(16, 185, 129);
+      doc.roundedRect(14, bannerY + 2, 28, 6, 1.5, 1.5, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(4, 120, 87);
+      doc.text("STATUS: LUNAS", 28, bannerY + 6.2, { align: "center" });
+    } else if (paymentStatus === "Overdue") {
+      doc.setFillColor(254, 226, 226); // rose-100
+      doc.setDrawColor(239, 68, 68);
+      doc.roundedRect(14, bannerY + 2, 34, 6, 1.5, 1.5, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(185, 28, 28);
+      doc.text("STATUS: OVERDUE", 31, bannerY + 6.2, { align: "center" });
+    } else {
+      doc.setFillColor(254, 243, 199); // amber-100
+      doc.setDrawColor(245, 158, 11);
+      doc.roundedRect(14, bannerY + 2, 36, 6, 1.5, 1.5, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(180, 83, 9);
+      doc.text("STATUS: BELUM LUNAS", 32, bannerY + 6.2, { align: "center" });
+    }
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`ID Reservasi: ${reservation?.id || "RES-101"}`, 56, bannerY + 6.2);
+    doc.text(`Metode Bayar: ${paymentStatus === "Paid" ? "Bank Transfer (BCA) / Terverifikasi" : "Menunggu Pembayaran Transfer"}`, 100, bannerY + 6.2);
+
+    // Two Metadata Cards (Tenant & Booking Details)
+    const cardY = 59;
+    const cardH = 43;
+
+    // Card 1: Tenant Information
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(10, cardY, 92, cardH, 2, 2, "FD");
+
+    // Tenant Header
+    doc.setFillColor(241, 245, 249);
+    doc.rect(10, cardY, 92, 7, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text("I. INFORMASI PENYEWA / TAMU (BILLED TO)", 14, cardY + 5);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text(tenant.name, 14, cardY + 12);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`No. KTP/Paspor : ${tenant.ktpNumber || "32731102940001"}`, 14, cardY + 17);
+    doc.text(`WhatsApp / Telp : ${tenant.phone || "-"}`, 14, cardY + 22);
+    doc.text(`Email           : ${tenant.email || `${tenant.name.toLowerCase().replace(/\s+/g, '')}@gmail.com`}`, 14, cardY + 27);
+    doc.text(`Pekerjaan / Inst: ${tenant.jobTitle || "Profesional"}`, 14, cardY + 32);
+
+    const contactName = tenant.emergencyContact?.name || "-";
+    const contactRel = tenant.emergencyContact?.relation ? ` (${tenant.emergencyContact.relation})` : "";
+    doc.text(`Kontak Darurat  : ${contactName}${contactRel}`, 14, cardY + 37);
+
+    // Card 2: Property & Booking Details
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(108, cardY, 92, cardH, 2, 2, "FD");
+
+    // Booking Header
+    doc.setFillColor(241, 245, 249);
+    doc.rect(108, cardY, 92, 7, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text("II. DETAIL PROPERTI & RESERVASI KAMAR", 112, cardY + 5);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${property?.name || "Properti"} (${property?.type || "Kost"})`, 112, cardY + 12);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Alamat Properti : ${property?.address ? property.address.substring(0, 40) : "-"}`, 112, cardY + 17);
+    doc.text(`Nomor Kamar     : Room ${unit?.unitNumber || "N/A"} - Lantai ${unit?.floor || 1}`, 112, cardY + 22);
+    doc.text(`Tipe Kamar      : ${unit?.type || "Standard Room"} (${unit?.size || 24} m2)`, 112, cardY + 27);
+    doc.text(`Periode Menginap: ${checkIn} s/d ${checkOut}`, 112, cardY + 32);
+    doc.text(`Durasi & Status : ${stayDurationLabel} • ${reservation?.status || "Checked In"}`, 112, cardY + 37);
+
+    // Table of Items
+    const tableHeaderY = 107;
+    doc.setFillColor(30, 41, 59); // slate-800
+    doc.rect(10, tableHeaderY, 190, 7, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text("NO", 14, tableHeaderY + 4.8);
+    doc.text("DESKRIPSI RINCIAN RESERVASI & LAYANAN", 25, tableHeaderY + 4.8);
+    doc.text("PERIODE / QTY", 120, tableHeaderY + 4.8);
+    doc.text("TARIF (IDR)", 155, tableHeaderY + 4.8, { align: "right" });
+    doc.text("TOTAL (IDR)", 194, tableHeaderY + 4.8, { align: "right" });
+
+    let currentY = tableHeaderY + 7;
+    doc.setFontSize(7.5);
+
+    itemsToBill.forEach((item, index) => {
+      if (index % 2 === 0) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(10, currentY, 190, 8, "F");
+      }
+      doc.setDrawColor(241, 245, 249);
+      doc.line(10, currentY + 8, 200, currentY + 8);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text(String(index + 1), 14, currentY + 5.2);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text(item.description, 25, currentY + 5.2);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text(item.qty, 120, currentY + 5.2);
+
+      doc.text(formatIDR(item.rate), 155, currentY + 5.2, { align: "right" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text(formatIDR(item.total), 194, currentY + 5.2, { align: "right" });
+
+      currentY += 8;
+    });
+
+    // Summary Box
+    currentY += 2;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(10, currentY, 200, currentY);
+    currentY += 4;
+
+    const summaryLeftX = 125;
+    const summaryRightX = 194;
+
+    // Subtotal
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Subtotal Tagihan :", summaryLeftX, currentY);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text(formatIDR(subtotal), summaryRightX, currentY, { align: "right" });
+
+    currentY += 5;
+    // Pajak
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Pajak / Biaya Administrasi (${taxPercentage}%) :`, summaryLeftX, currentY);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text(formatIDR(taxAmount), summaryRightX, currentY, { align: "right" });
+
+    currentY += 6;
+    // Total Box
+    doc.setFillColor(240, 253, 250); // emerald-50
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(summaryLeftX - 5, currentY - 4, 80, 10, 1.5, 1.5, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(5, 150, 105);
+    doc.text("TOTAL DITAGIHKAN :", summaryLeftX, currentY + 2.5);
+    doc.setFontSize(10);
+    doc.setTextColor(4, 120, 87);
+    doc.text(formatIDR(totalAmount), summaryRightX, currentY + 2.5, { align: "right" });
+
+    currentY += 12;
+
+    // Payment Info & Bank Account Instructions (Left Box)
+    const infoBoxY = currentY;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(10, infoBoxY, 110, 36, 2, 2, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text("INSTRUKSI PEMBAYARAN RESMI (BANK TRANSFER):", 14, infoBoxY + 5);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(71, 85, 105);
+    doc.text("1. Bank BCA No. Rek: 822-091-8899 a/n PT Forsdig Properti Indonesia", 14, infoBoxY + 10);
+    doc.text("2. Bank Mandiri No. Rek: 131-00-8822-9900 a/n PT Forsdig Properti", 14, infoBoxY + 14);
+    doc.text("3. QRIS / E-Wallet: Tersedia di Portal Penyewa Aplikasi PMS Pro", 14, infoBoxY + 18);
+    doc.text("* Wajib mencantumkan Berita Transfer: Nomor Invoice & Nama Penyewa.", 14, infoBoxY + 23);
+    doc.text("* Bukti transfer harap diunggah ke menu Pembayaran atau kirim ke WA Pengelola.", 14, infoBoxY + 27);
+    if (customNotes) {
+      doc.text(`* Catatan: ${customNotes.substring(0, 58)}`, 14, infoBoxY + 32);
+    } else {
+      doc.text("* Uang jaminan deposit bersifat refundable setelah inspeksi check-out selesai.", 14, infoBoxY + 32);
+    }
+
+    // Payment Confirmation Status (Right Box)
+    doc.setFillColor(paymentStatus === "Paid" ? 240 : 255, paymentStatus === "Paid" ? 253 : 251, paymentStatus === "Paid" ? 244 : 235);
+    doc.setDrawColor(paymentStatus === "Paid" ? 16 : 245, paymentStatus === "Paid" ? 185 : 158, paymentStatus === "Paid" ? 129 : 11);
+    doc.roundedRect(125, infoBoxY, 75, 36, 2, 2, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(paymentStatus === "Paid" ? 4 : 180, paymentStatus === "Paid" ? 120 : 83, paymentStatus === "Paid" ? 87 : 9);
+    doc.text("RINGKASAN STATUS REKENING:", 129, infoBoxY + 5);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Total Tagihan : ${formatIDR(totalAmount)}`, 129, infoBoxY + 11);
+    doc.text(`Telah Dibayar : ${paymentStatus === "Paid" ? formatIDR(totalAmount) : "Rp 0"}`, 129, infoBoxY + 16);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    if (paymentStatus === "Paid") {
+      doc.setTextColor(4, 120, 87);
+      doc.text("SISA TAGIHAN: RP 0 (LUNAS)", 129, infoBoxY + 23);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Terima kasih, pembayaran Anda telah sah terverifikasi!", 129, infoBoxY + 28);
+    } else {
+      doc.setTextColor(185, 28, 28);
+      doc.text(`SISA HARUS DIBAYAR: ${formatIDR(totalAmount)}`, 129, infoBoxY + 23);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(185, 28, 28);
+      doc.text(`Harap lunasi sebelum tanggal ${dueDateText}`, 129, infoBoxY + 28);
+    }
+
+    // Signatures Section
+    const signY = 224;
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.4);
+    doc.line(10, signY, 200, signY);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Penyewa / Penerima Faktur:", 20, signY + 6);
+    doc.text("Bagian Keuangan & Pengelola Properti:", 135, signY + 6);
+
+    // Digital signatures names
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(tenant.name, 20, signY + 24);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Tanda Tangan / Persetujuan Digital", 20, signY + 28);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text("Budi Santoso, S.E.", 135, signY + 24);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Finance & Property Manager", 135, signY + 28);
+    doc.setTextColor(16, 185, 129);
+    doc.text("[Verified Digital Stamp - PMS PRO]", 135, signY + 32);
+
+    // Footer Watermark / Disclaimer
+    doc.setFillColor(248, 250, 252);
+    doc.rect(10, 275, 190, 12, "F");
+    doc.setFontSize(6.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Faktur/Invoice ini diterbitkan secara otomatis dan sah oleh sistem Forsdig PMS Pro Enterprise.", 14, 279);
+    doc.text("Keaslian dokumen dapat diverifikasi dengan mencocokkan ID Reservasi dan Nomor Invoice di database sistem manajemen properti.", 14, 283);
+
+    // Clean filename
+    const cleanTenantName = tenant.name.replace(/[^a-zA-Z0-9]/g, "_");
+    const filename = `Invoice_Booking_${reservation?.id || "RES"}_${cleanTenantName}.pdf`;
+    doc.save(filename);
+
+    // Provide feedback toast
+    setWaToast({
+      show: true,
+      message: `Invoice PDF Booking untuk "${tenant.name}" (${filename}) berhasil di-generate dan diunduh!`,
+      type: "success"
+    });
+    setTimeout(() => setWaToast(null), 4500);
   };
 
   const exportFinancialStatementPDF = () => {
@@ -633,6 +1474,7 @@ export default function FinanceModule({
       totalAmount,
       dueDate,
       status: "Unpaid",
+      whatsappStatus: "Belum Terkirim",
       createdAt: new Date().toISOString()
     };
 
@@ -907,8 +1749,19 @@ export default function FinanceModule({
       {activeTab === "invoices" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Daftar Tagihan Penyewa</h3>
-            <div className="flex gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Daftar Tagihan Penyewa</h3>
+              <p className="text-xs text-gray-500">Kelola tagihan sewa, pengingat WhatsApp H-3 otomatis, dan status pembayaran</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setShowBookingInvoiceModal(true)}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                title="Generate dan unduh formatted PDF invoice untuk penyewa berdasarkan reservasi/booking"
+              >
+                <FileText className="h-4 w-4" />
+                Invoice PDF Booking
+              </button>
               <button
                 onClick={downloadInvoicesCSV}
                 className="p-2 bg-gray-150 hover:bg-gray-200 text-slate-700 rounded-xl text-xs font-bold border flex items-center gap-1 cursor-pointer"
@@ -919,11 +1772,128 @@ export default function FinanceModule({
               </button>
               <button
                 onClick={() => setShowInvoiceForm(true)}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1.5"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
                 Generate Tagihan
               </button>
+            </div>
+          </div>
+
+          {/* WHATSAPP AUTO-SCHEDULER DASHBOARD BANNER */}
+          <div className="bg-gradient-to-r from-slate-950 via-emerald-950 to-slate-900 text-white p-5 rounded-2xl border border-emerald-800/40 shadow-md relative overflow-hidden">
+            {/* Background glowing element */}
+            <div className="absolute top-0 right-0 w-80 h-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                    schedulerConfig.isEnabled 
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" 
+                      : "bg-slate-800 text-slate-400 border-slate-700"
+                  }`}>
+                    <span className={`h-2 w-2 rounded-full ${schedulerConfig.isEnabled ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+                    {schedulerConfig.isEnabled ? `Auto-Scheduler Aktif: Pengingat H-${schedulerConfig.daysBeforeDue} (${schedulerConfig.scheduledTime} WIB)` : "Scheduler Dinonaktifkan"}
+                  </span>
+                  <span className="text-slate-500 text-xs">•</span>
+                  <span className="text-[11px] text-emerald-200/80 font-medium flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-amber-400" />
+                    Otomatis mengirim pengingat WhatsApp H-3 ke penyewa belum lunas
+                  </span>
+                </div>
+
+                <h4 className="text-base font-extrabold text-white flex items-center gap-2">
+                  <MessageCircle className="h-5 w-5 text-emerald-400" />
+                  WhatsApp Auto-Reminder Scheduler (Pengingat Tagihan H-3)
+                </h4>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Sistem otomatis mendeteksi tagihan berstatus <strong className="text-amber-300">Belum Lunas</strong> pada <strong className="text-emerald-300">H-{schedulerConfig.daysBeforeDue} sebelum jatuh tempo</strong> dan menyiapkan pengiriman template pesan tagihan resmi ke nomor kontak WhatsApp tenant.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end">
+                <button
+                  onClick={() => handleExecuteSchedulerBatch()}
+                  disabled={isExecutingScheduler}
+                  className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl transition flex items-center gap-1.5 shadow-md shadow-emerald-950/40 cursor-pointer disabled:opacity-50"
+                  title="Jalankan pemindaian dan eksekusi pengiriman batch pengingat sekarang"
+                >
+                  {isExecutingScheduler ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-slate-950" />
+                      <span>Memproses Scheduler...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-4 w-4 fill-current text-slate-950" />
+                      <span>Jalankan Scheduler H-{schedulerConfig.daysBeforeDue} Sekarang</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setShowSchedulerConfigModal(true)}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  title="Konfigurasi jadwal H-3 dan template WhatsApp"
+                >
+                  <Settings className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Atur Aturan &amp; Template</span>
+                </button>
+
+                <button
+                  onClick={() => setShowSchedulerLogsModal(true)}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  title="Lihat riwayat log pengiriman otomatis"
+                >
+                  <History className="h-3.5 w-3.5 text-sky-400" />
+                  <span>Log Scheduler ({schedulerLogs.length})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics Bar */}
+            <div className="mt-4 pt-3.5 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Target H-3 Hari Ini</span>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-base font-black text-amber-400">
+                    {invoices.filter(i => (i.status === "Unpaid" || i.status === "Overdue") && getDaysUntilDue(i.dueDate) === 3).length}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Tagihan Siap</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Mendekati H-{schedulerConfig.daysBeforeDue}</span>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-base font-black text-emerald-400">
+                    {invoices.filter(i => (i.status === "Unpaid" || i.status === "Overdue") && getDaysUntilDue(i.dueDate) <= schedulerConfig.daysBeforeDue && getDaysUntilDue(i.dueDate) >= 0).length}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Tagihan</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Terkirim / Dibaca WA</span>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-base font-black text-sky-400">
+                    {invoices.filter(i => i.whatsappStatus === "Terkirim" || i.whatsappStatus === "Dibaca").length}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Invoice</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Jadwal Harian Otomatis</span>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-xs font-extrabold text-slate-200">
+                    Setiap hari pukul {schedulerConfig.scheduledTime} WIB
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1053,69 +2023,302 @@ export default function FinanceModule({
             </div>
           )}
 
+          {/* Filter & Search Bar */}
+          <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-3">
+            <div className="flex items-center gap-1.5 flex-wrap w-full lg:w-auto">
+              <span className="text-[11px] font-bold text-gray-500 mr-1 flex items-center gap-1">
+                <Filter className="h-3 w-3 text-emerald-600" /> Filter:
+              </span>
+              <button
+                onClick={() => { setWaStatusFilter("ALL"); setDueFilter("ALL"); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                  waStatusFilter === "ALL" && dueFilter === "ALL"
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Semua ({invoices.length})
+              </button>
+              <button
+                onClick={() => { setWaStatusFilter("Terkirim"); setDueFilter("ALL"); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                  waStatusFilter === "Terkirim" && dueFilter === "ALL"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
+                }`}
+              >
+                <Check className="h-3 w-3" />
+                Terkirim ({invoices.filter(i => i.whatsappStatus === "Terkirim").length})
+              </button>
+              <button
+                onClick={() => { setWaStatusFilter("Dibaca"); setDueFilter("ALL"); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                  waStatusFilter === "Dibaca" && dueFilter === "ALL"
+                    ? "bg-sky-600 text-white shadow-sm"
+                    : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
+                }`}
+              >
+                <CheckCheck className="h-3 w-3" />
+                Dibaca ({invoices.filter(i => i.whatsappStatus === "Dibaca").length})
+              </button>
+              <button
+                onClick={() => { setWaStatusFilter("Belum Terkirim"); setDueFilter("ALL"); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                  waStatusFilter === "Belum Terkirim" && dueFilter === "ALL"
+                    ? "bg-slate-700 text-white shadow-sm"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                <Clock className="h-3 w-3" />
+                Belum Terkirim ({invoices.filter(i => !i.whatsappStatus || i.whatsappStatus === "Belum Terkirim").length})
+              </button>
+              <button
+                onClick={() => { setWaStatusFilter("Gagal"); setDueFilter("ALL"); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                  waStatusFilter === "Gagal" && dueFilter === "ALL"
+                    ? "bg-rose-600 text-white shadow-sm"
+                    : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
+                }`}
+              >
+                <AlertCircle className="h-3 w-3" />
+                Gagal ({invoices.filter(i => i.whatsappStatus === "Gagal").length})
+              </button>
+
+              {/* Due Date Shortcut Filters */}
+              <div className="h-4 w-px bg-gray-200 mx-1 hidden sm:block" />
+              <button
+                onClick={() => { setDueFilter(dueFilter === "H3" ? "ALL" : "H3"); setWaStatusFilter("ALL"); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                  dueFilter === "H3"
+                    ? "bg-amber-500 text-slate-950 font-black shadow-sm"
+                    : "bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 font-extrabold"
+                }`}
+                title="Filter hanya invoice belum lunas tepat H-3 sebelum jatuh tempo"
+              >
+                <Zap className="h-3 w-3 text-amber-600 fill-current" />
+                🚨 Target H-3 ({invoices.filter(i => (i.status === "Unpaid" || i.status === "Overdue") && getDaysUntilDue(i.dueDate) === 3).length})
+              </button>
+              <button
+                onClick={() => { setDueFilter(dueFilter === "APPROACHING" ? "ALL" : "APPROACHING"); setWaStatusFilter("ALL"); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                  dueFilter === "APPROACHING"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 font-medium"
+                }`}
+                title="Filter tagihan belum lunas dalam rentang H-3 ke bawah"
+              >
+                <CalendarClock className="h-3 w-3 text-emerald-600" />
+                Mendekati Jatuh Tempo ({invoices.filter(i => (i.status === "Unpaid" || i.status === "Overdue") && getDaysUntilDue(i.dueDate) <= schedulerConfig.daysBeforeDue && getDaysUntilDue(i.dueDate) >= 0).length})
+              </button>
+            </div>
+
+            <div className="relative w-full lg:w-64">
+              <Search className="h-3.5 w-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Cari no. invoice, tenant, kamar..."
+                value={invoiceSearch}
+                onChange={(e) => setInvoiceSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-gray-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
           {/* TABLE LOG LIST */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[700px]">
+              <table className="w-full text-left text-xs min-w-[880px]">
                 <thead>
                   <tr className="bg-slate-50 text-gray-550 border-b">
-                    <th className="p-4">No. Invoice</th>
-                    <th className="p-4">Penyewa & Kamar</th>
-                    <th className="p-4">Rincian Item</th>
-                    <th className="p-4">Total Tagihan</th>
-                    <th className="p-4">Batas Akhir</th>
-                    <th className="p-4">Metode Status</th>
+                    <th className="p-4 font-bold text-slate-700">No. Invoice</th>
+                    <th className="p-4 font-bold text-slate-700">Penyewa & Kamar</th>
+                    <th className="p-4 font-bold text-slate-700">Rincian Item</th>
+                    <th className="p-4 font-bold text-slate-700">Total Tagihan</th>
+                    <th className="p-4 font-bold text-slate-700">Batas Akhir / Jatuh Tempo</th>
+                    <th className="p-4 font-bold text-slate-700">Status Tagihan</th>
+                    <th className="p-4 font-bold text-slate-700">
+                      <div className="flex items-center gap-1">
+                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Status WhatsApp</span>
+                      </div>
+                    </th>
+                    <th className="p-4 font-bold text-slate-700 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y text-slate-800 font-medium font-sans">
-                  {invoices.map((inv) => {
+                  {invoices
+                    .filter((inv) => {
+                      // WhatsApp status filter
+                      if (waStatusFilter !== "ALL") {
+                        const curWa = inv.whatsappStatus || "Belum Terkirim";
+                        if (curWa !== waStatusFilter) return false;
+                      }
+                      // Due date filter
+                      if (dueFilter === "H3") {
+                        if (inv.status === "Paid") return false;
+                        if (getDaysUntilDue(inv.dueDate) !== 3) return false;
+                      } else if (dueFilter === "APPROACHING") {
+                        if (inv.status === "Paid") return false;
+                        const d = getDaysUntilDue(inv.dueDate);
+                        if (d > schedulerConfig.daysBeforeDue || d < 0) return false;
+                      } else if (dueFilter === "OVERDUE") {
+                        if (inv.status === "Paid") return false;
+                        if (getDaysUntilDue(inv.dueDate) >= 0) return false;
+                      }
+                      // Search keyword filter
+                      if (invoiceSearch.trim()) {
+                        const q = invoiceSearch.toLowerCase().trim();
+                        const ten = tenants.find(t => t.id === inv.tenantId);
+                        const unt = units.find(u => u.id === inv.unitId);
+                        const matchInv = inv.invoiceNumber.toLowerCase().includes(q);
+                        const matchTen = ten?.name.toLowerCase().includes(q);
+                        const matchUnt = unt?.unitNumber.toLowerCase().includes(q);
+                        if (!matchInv && !matchTen && !matchUnt) return false;
+                      }
+                      return true;
+                    })
+                    .map((inv) => {
                     const ten = tenants.find(t => t.id === inv.tenantId);
                     const unt = units.find(u => u.id === inv.unitId);
+                    const curWaStatus = inv.whatsappStatus || "Belum Terkirim";
+                    const dueBadge = getDueBadge(inv.dueDate, inv.status);
+                    const isH3 = inv.status !== "Paid" && getDaysUntilDue(inv.dueDate) === 3;
+
                     return (
-                      <tr key={inv.id} className="hover:bg-slate-50/50">
+                      <tr key={inv.id} className={`hover:bg-slate-50/50 transition ${isH3 ? "bg-amber-50/30" : ""}`}>
                         <td className="p-4 whitespace-nowrap font-mono font-bold text-emerald-800">
-                          {inv.invoiceNumber}
-                        </td>
-                        <td className="p-4">
-                          <div className="space-y-1">
-                            <span className="font-extrabold text-slate-800 block text-sm">{ten?.name || "N/A"}</span>
-                            <span className="block text-gray-500 font-bold">Kamar No: {unt?.unitNumber || "N/A"}</span>
+                          <div className="flex items-center gap-1.5">
+                            {inv.invoiceNumber}
+                            {isH3 && (
+                              <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" title="Target H-3 Pengingat Hari Ini" />
+                            )}
                           </div>
                         </td>
-                        <td className="p-4 max-w-[200px]">
+                        <td className="p-4">
+                          <div className="space-y-0.5">
+                            <span className="font-extrabold text-slate-800 block text-sm">{ten?.name || "N/A"}</span>
+                            <div className="flex items-center gap-2 text-gray-500 font-medium text-[11px]">
+                              <span>Kamar: <strong className="text-slate-700">{unt?.unitNumber || "N/A"}</strong></span>
+                              {ten?.phone && (
+                                <span className="font-mono text-[10px] text-gray-400">({ten.phone})</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 max-w-[180px]">
                           <div className="space-y-0.5">
                             {inv.items.map((it) => (
                               <div key={it.id} className="flex justify-between text-[11px] text-gray-500">
-                                <span className="truncate max-w-[120px]">- {it.description}</span>
+                                <span className="truncate max-w-[110px]">- {it.description}</span>
                                 <span className="font-semibold">{formatIDR(it.amount)}</span>
                               </div>
                             ))}
                           </div>
                         </td>
-                        <td className="p-4 font-bold text-slate-800 text-sm">
+                        <td className="p-4 font-bold text-slate-800 text-sm whitespace-nowrap">
                           {formatIDR(inv.totalAmount)}
                         </td>
-                        <td className="p-4 text-red-500 font-bold whitespace-nowrap">
-                          {inv.dueDate}
-                        </td>
-                        <td className="p-4">
-                          <div className="flex gap-1.5 flex-wrap">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shadow-sm ${
-                                inv.status === "Paid"
-                                  ? "bg-green-100 text-green-800 border-green-250"
-                                  : inv.status === "Unpaid"
-                                  ? "bg-yellow-105 text-yellow-850"
-                                  : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                              {inv.status}
+                        <td className="p-4 whitespace-nowrap">
+                          <div className="space-y-1">
+                            <span className={`font-bold block ${inv.status === "Paid" ? "text-slate-700" : "text-red-500"}`}>
+                              {inv.dueDate}
                             </span>
-                            
+                            {dueBadge && (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] border ${dueBadge.bg}`}>
+                                {dueBadge.isH3 && <Zap className="h-2.5 w-2.5 fill-current text-amber-600" />}
+                                {dueBadge.label}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-sm inline-block ${
+                              inv.status === "Paid"
+                                ? "bg-green-100 text-green-800 border border-green-200"
+                                : inv.status === "Unpaid"
+                                ? "bg-yellow-100 text-yellow-800 border border-yellow-200"
+                                : "bg-red-100 text-red-800 border border-red-200"
+                            }`}
+                          >
+                            {inv.status}
+                          </span>
+                        </td>
+                        {/* WhatsApp Delivery Status & Timestamp Column */}
+                        <td className="p-4 whitespace-nowrap">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              {curWaStatus === "Terkirim" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <Check className="h-3 w-3" />
+                                  Terkirim
+                                </span>
+                              )}
+                              {curWaStatus === "Dibaca" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                                  <CheckCheck className="h-3 w-3 text-sky-600" />
+                                  Dibaca
+                                </span>
+                              )}
+                              {curWaStatus === "Gagal" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                  <AlertCircle className="h-3 w-3" />
+                                  Gagal
+                                </span>
+                              )}
+                              {curWaStatus === "Belum Terkirim" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                  <Clock className="h-3 w-3 text-slate-400" />
+                                  Belum Terkirim
+                                </span>
+                              )}
+
+                              <button
+                                onClick={() => handleSendWhatsApp(inv)}
+                                className={`p-1 px-2 rounded text-[10px] font-bold inline-flex items-center gap-1 shadow-sm transition ${
+                                  isH3
+                                    ? "bg-amber-500 hover:bg-amber-600 text-slate-950 font-black"
+                                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                }`}
+                                title={isH3 ? "Kirim Pengingat WhatsApp H-3 Sekarang" : "Kirim Tagihan via WhatsApp"}
+                              >
+                                <MessageCircle className="h-3 w-3" />
+                                {isH3 ? "Kirim H-3" : curWaStatus === "Terkirim" || curWaStatus === "Dibaca" ? "Kirim Ulang" : "Kirim WA"}
+                              </button>
+                            </div>
+
+                            {/* Timestamp & Quick Status Modifier */}
+                            <div className="flex items-center justify-between text-[10px] text-gray-500 font-medium">
+                              <span className="font-mono">
+                                {inv.whatsappSentAt ? (
+                                  <span title={inv.whatsappSentAt}>
+                                    Terakhir: <strong className="text-slate-700 font-semibold">{formatWhatsAppTimestamp(inv.whatsappSentAt)}</strong>
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 italic">Belum ada riwayat kirim</span>
+                                )}
+                              </span>
+                              
+                              <select
+                                value={curWaStatus}
+                                onChange={(e) => handleUpdateWhatsAppStatus(inv, e.target.value as WhatsAppStatus)}
+                                className="text-[9px] bg-slate-50 border border-gray-200 rounded px-1 py-0.5 text-gray-600 font-semibold focus:outline-none hover:bg-slate-100 cursor-pointer ml-2"
+                                title="Ubah status WhatsApp secara manual"
+                              >
+                                <option value="Belum Terkirim">Set: Belum Terkirim</option>
+                                <option value="Terkirim">Set: Terkirim</option>
+                                <option value="Dibaca">Set: Dibaca</option>
+                                <option value="Gagal">Set: Gagal</option>
+                              </select>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
                             {inv.status !== "Paid" && (
                               <button
                                 onClick={() => loadPayModal(inv)}
-                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-sm select-all cursor-pointer"
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-sm select-all cursor-pointer transition"
                               >
                                 Lunasi
                               </button>
@@ -1125,10 +2328,39 @@ export default function FinanceModule({
                               onClick={() => {
                                 setPrintingInvoice(inv);
                               }}
-                              className="p-1 px-1.5 border hover:bg-gray-100 text-slate-600 rounded"
+                              className="p-1 px-1.5 border hover:bg-gray-100 text-slate-600 rounded transition cursor-pointer"
                               title="Cetak Receipt/PDF"
                             >
                               <Printer className="h-3.5 w-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                generateAndDownloadBookingInvoicePDF({
+                                  tenantId: inv.tenantId,
+                                  invoiceNumber: inv.invoiceNumber,
+                                  dueDate: inv.dueDate,
+                                  paymentStatus: inv.status,
+                                  customItems: inv.items
+                                });
+                              }}
+                              className="p-1 px-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded transition cursor-pointer"
+                              title="Generate & Unduh Formatted PDF Invoice dari Detail Booking"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setSelectedWaModalInvoice(inv);
+                                const t = tenants.find(tn => tn.id === inv.tenantId);
+                                setCustomWaPhone(inv.whatsappPhone || t?.phone || "");
+                                setCustomWaNote("");
+                              }}
+                              className="p-1 px-1.5 border border-emerald-200 hover:bg-emerald-50 text-emerald-700 rounded transition"
+                              title="Review / Kustomisasi WhatsApp Invoice"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
                             </button>
                           </div>
                         </td>
@@ -1139,6 +2371,415 @@ export default function FinanceModule({
               </table>
             </div>
           </div>
+
+          {/* Modal Kustomisasi / Preview Pengiriman WhatsApp */}
+          {selectedWaModalInvoice && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-2xl max-w-lg w-full p-5 border border-gray-200 shadow-xl space-y-4">
+                <div className="flex justify-between items-center border-b pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+                      <MessageCircle className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">Kirim Tagihan via WhatsApp</h3>
+                      <p className="text-[11px] text-gray-500">Invoice: {selectedWaModalInvoice.invoiceNumber}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedWaModalInvoice(null)}
+                    className="text-gray-400 hover:text-gray-600 text-sm font-bold p-1 rounded-lg"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Nomor WhatsApp Penerima</label>
+                    <input
+                      type="text"
+                      value={customWaPhone}
+                      onChange={(e) => setCustomWaPhone(e.target.value)}
+                      placeholder="Contoh: 08123456789 atau 628123456789"
+                      className="w-full p-2.5 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Catatan Tambahan (Opsional)</label>
+                    <textarea
+                      value={customWaNote}
+                      onChange={(e) => setCustomWaNote(e.target.value)}
+                      rows={2}
+                      placeholder="Contoh: Promo diskon lunas sebelum tgl 3, info rekening BCA 123-456 a/n PT Properti..."
+                      className="w-full p-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+                    <span className="font-bold text-slate-700 block text-[11px]">Ringkasan Tagihan:</span>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Total Biaya:</span>
+                      <strong className="text-slate-800">{formatIDR(selectedWaModalInvoice.totalAmount)}</strong>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Jatuh Tempo:</span>
+                      <strong className="text-red-600">{selectedWaModalInvoice.dueDate}</strong>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Status WhatsApp Saat Ini:</span>
+                      <strong className="text-emerald-700 font-semibold">{selectedWaModalInvoice.whatsappStatus || "Belum Terkirim"}</strong>
+                    </div>
+                    {selectedWaModalInvoice.whatsappSentAt && (
+                      <div className="flex justify-between text-gray-600">
+                        <span>Pengiriman Terakhir:</span>
+                        <span className="font-mono text-[10px]">{formatWhatsAppTimestamp(selectedWaModalInvoice.whatsappSentAt)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWaModalInvoice(null)}
+                    className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendWhatsApp(selectedWaModalInvoice, customWaPhone, customWaNote)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Kirim Pesan WhatsApp Sekarang
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: PENGATURAN WHATSAPP SCHEDULER */}
+          {showSchedulerConfigModal && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-white rounded-3xl max-w-xl w-full border border-gray-100 shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
+                {/* Modal Header */}
+                <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-2xl border border-emerald-500/30">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-white">Konfigurasi Pengingat WhatsApp Otomatis</h3>
+                      <p className="text-xs text-slate-300">Atur jadwal pengingat jatuh tempo H-3 dan template pesan tagihan</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowSchedulerConfigModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-white rounded-xl transition hover:bg-slate-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
+                  {/* Toggle Active */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-gray-200 flex items-center justify-between">
+                    <div>
+                      <label className="font-extrabold text-sm text-slate-800 block">Status Pengingat Otomatis</label>
+                      <p className="text-[11px] text-gray-500 mt-0.5">Aktifkan sistem otomatis scanning dan pengiriman WhatsApp</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={schedulerConfig.isEnabled}
+                        onChange={(e) => setSchedulerConfig(prev => ({ ...prev, isEnabled: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Trigger Day & Execution Time */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                        <CalendarClock className="h-4 w-4 text-emerald-600" />
+                        Jadwal Peringatan (Hari Sebelum Jatuh Tempo)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-400">H-</span>
+                        <select
+                          value={schedulerConfig.daysBeforeDue}
+                          onChange={(e) => setSchedulerConfig(prev => ({ ...prev, daysBeforeDue: Number(e.target.value) }))}
+                          className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl font-bold text-slate-800 focus:bg-white focus:outline-none"
+                        >
+                          <option value={1}>1 Hari Sebelum (H-1)</option>
+                          <option value={2}>2 Hari Sebelum (H-2)</option>
+                          <option value={3}>3 Hari Sebelum (H-3 - Rekomendasi)</option>
+                          <option value={5}>5 Hari Sebelum (H-5)</option>
+                          <option value={7}>7 Hari Sebelum (H-7)</option>
+                        </select>
+                      </div>
+                      <p className="text-[10px] text-gray-500">Standar operasional kos biasanya menggunakan H-3 sebelum jatuh tempo.</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                        <Clock className="h-4 w-4 text-emerald-600" />
+                        Waktu Eksekusi Harian
+                      </label>
+                      <input
+                        type="time"
+                        value={schedulerConfig.scheduledTime}
+                        onChange={(e) => setSchedulerConfig(prev => ({ ...prev, scheduledTime: e.target.value }))}
+                        className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl font-mono font-bold text-slate-800 focus:bg-white focus:outline-none"
+                      />
+                      <p className="text-[10px] text-gray-500">Waktu pengingat dikirimkan ke tenant (Zona WIB).</p>
+                    </div>
+                  </div>
+
+                  {/* Auto Mark as Sent */}
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2.5 cursor-pointer bg-slate-50 p-3 rounded-xl border border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={schedulerConfig.autoMarkSent}
+                        onChange={(e) => setSchedulerConfig(prev => ({ ...prev, autoMarkSent: e.target.checked }))}
+                        className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-800 block">Otomatis Update Status WhatsApp jadi 'Terkirim'</span>
+                        <span className="text-[11px] text-gray-500">Tandai status invoice dengan status Terkirim dan simpan timestamp saat batch diproses.</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 cursor-pointer bg-slate-50 p-3 rounded-xl border border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={schedulerConfig.includePaymentInstructions}
+                        onChange={(e) => setSchedulerConfig(prev => ({ ...prev, includePaymentInstructions: e.target.checked }))}
+                        className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-800 block">Sertakan Instruksi Rekening Pembayaran</span>
+                        <span className="text-[11px] text-gray-500">Lampirkan otomatis nomor rekening BCA &amp; Bank Mandiri manajemen kos.</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Custom Message Template */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="font-bold text-slate-800">Template Pesan Pengingat H-3</label>
+                      <button
+                        type="button"
+                        onClick={() => setSchedulerConfig(prev => ({
+                          ...prev,
+                          messageTemplate: `Halo Kak {tenant_name}, mohon izin mengingatkan tagihan sewa kamar {unit_number} ({invoice_no}) sebesar {total_amount} akan jatuh tempo pada {due_date} (H-{days_left}). Mohon lakukan pembayaran sebelum tanggal jatuh tempo. Terima kasih!`
+                        }))}
+                        className="text-[10px] text-emerald-600 font-bold hover:underline"
+                      >
+                        Reset ke Default
+                      </button>
+                    </div>
+                    <textarea
+                      rows={4}
+                      value={schedulerConfig.messageTemplate}
+                      onChange={(e) => setSchedulerConfig(prev => ({ ...prev, messageTemplate: e.target.value }))}
+                      className="w-full p-3 bg-slate-50 border border-gray-200 rounded-xl font-mono text-xs text-slate-800 focus:bg-white focus:outline-none"
+                    />
+                    <div className="flex flex-wrap gap-1 text-[10px] text-gray-500">
+                      <span className="font-semibold text-gray-600">Variabel:</span>
+                      <code className="bg-gray-100 px-1 py-0.5 rounded text-slate-700">{"{tenant_name}"}</code>
+                      <code className="bg-gray-100 px-1 py-0.5 rounded text-slate-700">{"{unit_number}"}</code>
+                      <code className="bg-gray-100 px-1 py-0.5 rounded text-slate-700">{"{invoice_no}"}</code>
+                      <code className="bg-gray-100 px-1 py-0.5 rounded text-slate-700">{"{total_amount}"}</code>
+                      <code className="bg-gray-100 px-1 py-0.5 rounded text-slate-700">{"{due_date}"}</code>
+                      <code className="bg-gray-100 px-1 py-0.5 rounded text-slate-700">{"{days_left}"}</code>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+                  <div className="text-[11px] text-gray-500 flex items-center gap-1">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                    Pengaturan tersimpan otomatis
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowSchedulerConfigModal(false)}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                    >
+                      Selesai &amp; Simpan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: RIWAYAT LOG SCHEDULER */}
+          {showSchedulerLogsModal && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-white rounded-3xl max-w-3xl w-full border border-gray-100 shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
+                {/* Modal Header */}
+                <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-sky-500/20 text-sky-400 rounded-2xl border border-sky-500/30">
+                      <History className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-white">Riwayat Eksekusi WhatsApp Scheduler</h3>
+                      <p className="text-xs text-slate-300">Catatan riwayat scanning dan pengiriman pengingat tagihan otomatis</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowSchedulerLogsModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-white rounded-xl transition hover:bg-slate-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Log List */}
+                <div className="p-6 overflow-y-auto space-y-4 text-xs">
+                  {schedulerLogs.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 space-y-2">
+                      <Clock className="h-8 w-8 mx-auto text-gray-300" />
+                      <p className="font-bold">Belum ada riwayat eksekusi scheduler</p>
+                      <p className="text-[11px]">Jalankan batch scheduler atau tunggu jadwal otomatis harian.</p>
+                    </div>
+                  ) : (
+                    schedulerLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="bg-slate-50 border border-gray-200 rounded-2xl p-4 space-y-3 hover:border-gray-300 transition"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                              log.status === "Success"
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                : log.status === "Partial"
+                                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                : "bg-rose-100 text-rose-800 border border-rose-200"
+                            }`}>
+                              {log.status === "Success" ? "Sukses Sempurna" : log.status === "Partial" ? "Terkirim Sebagian" : "Gagal"}
+                            </span>
+
+                            <span className="font-mono text-xs font-bold text-slate-800">
+                              {log.executedAt.replace("T", " ")}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-[11px] text-gray-500 font-medium">
+                            <span>Target: <strong className="text-slate-800">{log.invoicesTargetedCount} Invoice</strong></span>
+                            <span>•</span>
+                            <span>Berhasil: <strong className="text-emerald-700 font-bold">{log.invoicesProcessedCount} Terkirim</strong></span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <p className="text-slate-700 font-medium leading-relaxed">{log.summary}</p>
+                          
+                          {/* Target Details preview */}
+                          {log.details && log.details.length > 0 && (
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 space-y-1.5 mt-2">
+                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Daftar Tagihan yang Diproses:</span>
+                              <div className="divide-y divide-gray-100">
+                                {log.details.map((d, idx) => (
+                                  <div key={idx} className="py-1 flex items-center justify-between text-[11px]">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-bold text-emerald-800">{d.invoiceNumber}</span>
+                                      <span className="text-slate-700 font-semibold">{d.tenantName}</span>
+                                      <span className="text-gray-400 font-mono text-[10px]">({d.phone})</span>
+                                    </div>
+                                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      {d.status}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Total {schedulerLogs.length} riwayat log tersimpan</span>
+                  <button
+                    onClick={() => setShowSchedulerLogsModal(false)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EXECUTION PROGRESS OVERLAY */}
+          {isExecutingScheduler && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-slate-950 border border-emerald-500/30 text-white rounded-3xl max-w-md w-full p-6 shadow-2xl text-center space-y-5 animate-scale-up">
+                <div className="w-16 h-16 mx-auto bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center border border-emerald-500/20">
+                  <Zap className="h-8 w-8 text-emerald-400 fill-current animate-pulse" />
+                </div>
+
+                <div className="space-y-1">
+                  <h3 className="text-base font-extrabold text-white">Memproses Pengingat WhatsApp H-{schedulerConfig.daysBeforeDue}</h3>
+                  <p className="text-xs text-slate-300">Memindai tagihan belum lunas dan mengirimkan template resmi...</p>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="space-y-1.5">
+                  <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden border border-slate-700">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: schedulerProgress.total > 0 
+                          ? `${(schedulerProgress.current / schedulerProgress.total) * 100}%` 
+                          : '100%'
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                    <span>Sedang memproses...</span>
+                    <span>{schedulerProgress.current} / {schedulerProgress.total}</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-emerald-300 font-medium">
+                  {schedulerProgress.statusText || "Mengirimkan notifikasi WhatsApp secara berurutan..."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Floating Toast Notification */}
+          {waToast && (
+            <div className="fixed bottom-6 right-6 z-50 animate-slide-up bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-slate-700 text-xs flex items-center gap-3">
+              <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
+                <Check className="h-4 w-4" />
+              </div>
+              <span className="font-medium">{waToast.message}</span>
+              <button
+                onClick={() => setWaToast(null)}
+                className="text-slate-400 hover:text-white ml-2 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* RIWAYAT OTOMATIS EMAIL INVOICE LOG */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-6 space-y-4">
@@ -1821,19 +3462,35 @@ export default function FinanceModule({
               </div>
             </div>
 
-            <div className="pt-4 flex justify-end gap-2 border-t print:hidden">
+            <div className="pt-4 flex justify-end gap-2 border-t print:hidden flex-wrap">
               <button
                 onClick={() => setPrintingInvoice(null)}
-                className="px-4 py-2 border rounded-xl text-xs font-bold hover:bg-gray-50"
+                className="px-4 py-2 border rounded-xl text-xs font-bold hover:bg-gray-50 cursor-pointer"
               >
                 Batal
               </button>
               <button
+                onClick={() => {
+                  generateAndDownloadBookingInvoicePDF({
+                    tenantId: printingInvoice.tenantId,
+                    invoiceNumber: printingInvoice.invoiceNumber,
+                    dueDate: printingInvoice.dueDate,
+                    paymentStatus: printingInvoice.status,
+                    customItems: printingInvoice.items
+                  });
+                }}
+                className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Download Formatted PDF Invoice Berdasarkan Detail Booking"
+              >
+                <Download className="h-4 w-4" />
+                Unduh PDF Invoice Booking
+              </button>
+              <button
                 onClick={() => window.print()}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1.5"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1.5 cursor-pointer"
               >
                 <Printer className="h-4 w-4" />
-                Cetak / Konversi PDF
+                Cetak / Print
               </button>
             </div>
           </div>
@@ -2007,6 +3664,247 @@ export default function FinanceModule({
           </div>
         </div>
       )}
+      {/* MODAL GENERATE & UNDUH PDF INVOICE BOOKING */}
+      {showBookingInvoiceModal && (() => {
+        const curTenant = tenants.find(t => t.id === selectedBookingTenantId) || tenants[0];
+        const tenantReservations = curTenant ? allReservations.filter(r => r.tenantId === curTenant.id) : [];
+        const curReservation = selectedBookingReservationId
+          ? allReservations.find(r => r.id === selectedBookingReservationId)
+          : (tenantReservations[0] || allReservations[0]);
+
+        const curUnit = units.find(u => u.id === curReservation?.unitId) || units[0];
+        const curProperty = properties.find(p => p.id === (curReservation?.propertyId || curUnit?.propertyId)) || properties[0];
+
+        // Rent calculations
+        const rawRent = curReservation?.totalPrice
+          ? Math.max(0, curReservation.totalPrice - (bookingInvoiceIncludeDeposit ? (curReservation.deposit || 0) : 0))
+          : (curUnit?.price || 2500000);
+        const deposit = bookingInvoiceIncludeDeposit ? (curReservation?.deposit || 1000000) : 0;
+        const subtotal = rawRent + deposit;
+        const taxAmount = Math.round(rawRent * (bookingInvoiceTaxPercent / 100));
+        const totalEstimate = subtotal + taxAmount;
+
+        const checkIn = curReservation?.checkInDate || "2026-06-01";
+        const checkOut = curReservation?.checkOutDate || "2026-12-31";
+        const diffTime = Math.abs(new Date(checkOut).getTime() - new Date(checkIn).getTime());
+        const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 overflow-hidden animate-scale-up text-xs font-sans max-h-[92vh] flex flex-col">
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-xl">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-white">Generate & Unduh Formatted PDF Invoice</h3>
+                    <p className="text-[11px] text-slate-300">Buat faktur penagihan resmi berbasis detail reservasi kamar penyewa</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowBookingInvoiceModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg transition hover:bg-slate-700/50 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Modal Content / Form */}
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                {/* 1. Tenant Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
+                    Pilih Penyewa (Tenant):
+                  </label>
+                  <select
+                    value={selectedBookingTenantId}
+                    onChange={(e) => setSelectedBookingTenantId(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-rose-500 focus:outline-none transition cursor-pointer"
+                  >
+                    {tenants.map((t) => {
+                      const tRes = allReservations.find(r => r.tenantId === t.id);
+                      const tUnit = units.find(u => u.id === tRes?.unitId);
+                      return (
+                        <option key={t.id} value={t.id}>
+                          {t.name} • {tUnit ? `Kamar ${tUnit.unitNumber}` : "Semua Kamar"} ({t.phone || "No HP"})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* 2. Reservation Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
+                    Pilih Reservasi / Booking:
+                  </label>
+                  {tenantReservations.length > 0 ? (
+                    <select
+                      value={selectedBookingReservationId || tenantReservations[0].id}
+                      onChange={(e) => setSelectedBookingReservationId(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-rose-500 focus:outline-none transition cursor-pointer"
+                    >
+                      {tenantReservations.map((r) => {
+                        const u = units.find(unit => unit.id === r.unitId);
+                        const p = properties.find(prop => prop.id === r.propertyId);
+                        return (
+                          <option key={r.id} value={r.id}>
+                            ID: {r.id} • {p?.name || "Properti"} - Room {u?.unitNumber || "N/A"} ({r.checkInDate} s/d {r.checkOutDate}) - Status: {r.status}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  ) : (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
+                      Penyewa ini belum memiliki riwayat reservasi tersimpan. Sistem akan menggunakan data reservasi default untuk membuat faktur.
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Booking Details Preview Card */}
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Rincian Data Booking</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      curReservation?.paymentStatus === "Paid"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}>
+                      Status Pembayaran: {curReservation?.paymentStatus || "Paid"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-slate-700">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Properti & Unit</span>
+                      <strong className="text-slate-800 block text-xs">{curProperty?.name}</strong>
+                      <span className="text-[11px] text-slate-500">Room {curUnit?.unitNumber} ({curUnit?.type}, Lantai {curUnit?.floor})</span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Periode Sewa / Durasi</span>
+                      <strong className="text-slate-800 block text-xs">{checkIn} s/d {checkOut}</strong>
+                      <span className="text-[11px] text-slate-500">{diffDays} Hari ({Math.round(diffDays / 30)} Bulan)</span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Tarif Sewa Kamar</span>
+                      <strong className="text-slate-800 text-xs">{formatIDR(rawRent)}</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Uang Jaminan (Deposit)</span>
+                      <strong className="text-slate-800 text-xs">{formatIDR(curReservation?.deposit || 1000000)}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Invoice Options */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
+                      Pajak / Biaya Administrasi:
+                    </label>
+                    <select
+                      value={bookingInvoiceTaxPercent}
+                      onChange={(e) => setBookingInvoiceTaxPercent(Number(e.target.value))}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none cursor-pointer"
+                    >
+                      <option value={0}>0% - Tanpa Pajak</option>
+                      <option value={1}>1% - Pajak Daerah / PPh Standar</option>
+                      <option value={11}>11% - PPN Standar Nasional</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-5">
+                    <input
+                      type="checkbox"
+                      id="inc-deposit-check"
+                      checked={bookingInvoiceIncludeDeposit}
+                      onChange={(e) => setBookingInvoiceIncludeDeposit(e.target.checked)}
+                      className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 border-gray-300 cursor-pointer"
+                    />
+                    <label htmlFor="inc-deposit-check" className="text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                      Sertakan Uang Jaminan / Deposit
+                    </label>
+                  </div>
+                </div>
+
+                {/* 5. Custom Notes */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
+                    Catatan Khusus di Faktur (Opsional):
+                  </label>
+                  <input
+                    type="text"
+                    value={bookingInvoiceCustomNotes}
+                    onChange={(e) => setBookingInvoiceCustomNotes(e.target.value)}
+                    placeholder="Contoh: Termasuk biaya listrik AC & akses wifi 100 Mbps..."
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none transition"
+                  />
+                </div>
+
+                {/* 6. Total Calculation Banner */}
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-black tracking-wider text-emerald-700 block">Total Ditagihkan (Invoice Total)</span>
+                    <span className="text-lg font-black text-emerald-700">{formatIDR(totalEstimate)}</span>
+                  </div>
+                  <div className="text-right text-[10px] text-emerald-800">
+                    <span>Sewa: {formatIDR(rawRent)}</span>
+                    {deposit > 0 && <span> + Dep: {formatIDR(deposit)}</span>}
+                    {taxAmount > 0 && <span> + Pjk: {formatIDR(taxAmount)}</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  onClick={() => setShowBookingInvoiceModal(false)}
+                  className="px-4 py-2 border border-slate-200 bg-white hover:bg-slate-100 rounded-xl text-xs font-bold text-slate-700 transition cursor-pointer"
+                >
+                  Batal
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsGeneratingBookingPdf(true);
+                    setTimeout(() => {
+                      generateAndDownloadBookingInvoicePDF({
+                        tenantId: curTenant.id,
+                        reservationId: curReservation?.id,
+                        customNotes: bookingInvoiceCustomNotes || undefined,
+                        taxPercentage: bookingInvoiceTaxPercent,
+                        includeDeposit: bookingInvoiceIncludeDeposit,
+                        paymentStatus: curReservation?.paymentStatus || "Paid"
+                      });
+                      setIsGeneratingBookingPdf(false);
+                      setShowBookingInvoiceModal(false);
+                    }, 400);
+                  }}
+                  disabled={isGeneratingBookingPdf}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-2 shadow-md shadow-rose-900/20 cursor-pointer disabled:opacity-60"
+                >
+                  {isGeneratingBookingPdf ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Membuat PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      <span>Download PDF Invoice Sekarang</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

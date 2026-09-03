@@ -33,6 +33,17 @@ import VoiceCallTab from "./workchat/VoiceCallTab";
 import CalendarTab from "./workchat/CalendarTab";
 import PersonalNotesTab from "./workchat/PersonalNotesTab";
 
+const generateUUID = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 interface WorkChatModuleProps {
   activeRole: UserRole;
   chatMessages: WorkChatMessage[];
@@ -286,13 +297,15 @@ export default function WorkChatModule({
     if (e) e.preventDefault();
     if (!typedMessage.trim()) return;
 
+    const nowIso = new Date().toISOString();
     const newMsg: WorkChatMessage = {
-      id: "chat-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4),
+      id: generateUUID(),
       senderName: simulatedName,
       senderRole: simulatedRole,
       channel: selectedChatId, // serves as channel/group/dm indicator
       message: typedMessage.trim(),
-      createdAt: new Date().toISOString()
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
 
     if (selectedChatType === "channel") {
@@ -309,13 +322,15 @@ export default function WorkChatModule({
   };
 
   const handleSendPresetOnChannel = (preset: string) => {
+    const nowIso = new Date().toISOString();
     const newMsg: WorkChatMessage = {
-      id: "chat-preset-" + Date.now(),
+      id: generateUUID(),
       senderName: simulatedName,
       senderRole: simulatedRole,
       channel: selectedChatId,
       message: preset,
-      createdAt: new Date().toISOString()
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
 
     if (selectedChatType === "channel") {
@@ -356,14 +371,16 @@ export default function WorkChatModule({
     if (!typedMessage.trim() || selectedChatType !== "dm") return;
 
     const dmChannelId = `dm-${simulatedRole}-${selectedChatId}`;
+    const nowIso = new Date().toISOString();
 
     const newMsg: WorkChatMessage = {
-      id: "dm-" + Date.now(),
+      id: generateUUID(),
       senderName: simulatedName,
       senderRole: simulatedRole,
       channel: dmChannelId, // Store composite key for parsing
       message: typedMessage.trim(),
-      createdAt: new Date().toISOString()
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
 
     const updatedLocal = [...localExtendedMessages, newMsg];

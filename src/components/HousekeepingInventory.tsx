@@ -26,17 +26,17 @@ import {
   CheckSquare,
   Minus,
   Edit,
-  Upload
+  Upload,
+  Camera,
+  QrCode,
+  Tag,
+  Printer
 } from "lucide-react";
 import { Unit, Property, Employee } from "../types";
+import HousekeepingQrScannerModal, { InventoryItemWithAsset } from "./HousekeepingQrScannerModal";
+import HousekeepingQrTagModal from "./HousekeepingQrTagModal";
 
-interface InventoryItem {
-  id: string;
-  name: string;
-  quantity: number;
-  minQuantity: number;
-  category: "Consumables" | "Linens" | "Amenities" | "Tools";
-}
+export type InventoryItem = InventoryItemWithAsset;
 
 interface HousekeepingLog {
   id: string;
@@ -60,15 +60,23 @@ interface ShiftRoster {
   notes: string;
 }
 
-const defaultInventory: InventoryItem[] = [
-  { id: "inv-1", name: "Sabun Mandi Gel Mini 30ml", quantity: 154, minQuantity: 50, category: "Amenities" },
-  { id: "inv-2", name: "Sprei Kasur Putih King Premium", quantity: 48, minQuantity: 15, category: "Linens" },
-  { id: "inv-3", name: "Sprei Kasur Putih Single Cotton", quantity: 35, minQuantity: 10, category: "Linens" },
-  { id: "inv-4", name: "Sikat Gigi Hotel Pack Duo", quantity: 12, minQuantity: 40, category: "Amenities" },
-  { id: "inv-5", name: "Cairan Pembersih Lantai Lavender (Liter)", quantity: 8, minQuantity: 5, category: "Consumables" },
-  { id: "inv-6", name: "Pewangi Ruangan Spray Citrus Eco", quantity: 14, minQuantity: 4, category: "Consumables" },
-  { id: "inv-7", name: "Handuk Mandi Putih Tebal", quantity: 60, minQuantity: 20, category: "Linens" },
-  { id: "inv-8", name: "Kain Lap Mikrofiber Kuning", quantity: 15, minQuantity: 6, category: "Tools" }
+const defaultInventory: InventoryItemWithAsset[] = [
+  // Amenities & Consumables
+  { id: "inv-1", assetCode: "AST-AMN-01", name: "Sabun Mandi Gel Mini 30ml", quantity: 154, minQuantity: 50, category: "Amenities", assignedRoom: "Gudang Amenities", conditionStatus: "Good" },
+  { id: "inv-2", assetCode: "AST-LIN-KG", name: "Sprei Kasur Putih King Premium", quantity: 48, minQuantity: 15, category: "Linens", assignedRoom: "Gudang Linen", conditionStatus: "Good" },
+  { id: "inv-3", assetCode: "AST-LIN-SGL", name: "Sprei Kasur Putih Single Cotton", quantity: 35, minQuantity: 10, category: "Linens", assignedRoom: "Gudang Linen", conditionStatus: "Good" },
+  { id: "inv-4", assetCode: "AST-AMN-02", name: "Sikat Gigi Hotel Pack Duo", quantity: 12, minQuantity: 40, category: "Amenities", assignedRoom: "Gudang Amenities", conditionStatus: "Needs Maintenance" },
+  { id: "inv-5", assetCode: "AST-CSM-01", name: "Cairan Pembersih Lantai Lavender (Liter)", quantity: 8, minQuantity: 5, category: "Consumables", assignedRoom: "Janitor Room", conditionStatus: "Good" },
+  { id: "inv-6", assetCode: "AST-CSM-02", name: "Pewangi Ruangan Spray Citrus Eco", quantity: 14, minQuantity: 4, category: "Consumables", assignedRoom: "Janitor Room", conditionStatus: "Good" },
+  { id: "inv-7", assetCode: "AST-LIN-TWL", name: "Handuk Mandi Putih Tebal 70x140", quantity: 60, minQuantity: 20, category: "Linens", assignedRoom: "Gudang Linen", conditionStatus: "Good" },
+  { id: "inv-8", assetCode: "AST-TLS-01", name: "Kain Lap Mikrofiber Kuning", quantity: 15, minQuantity: 6, category: "Tools", assignedRoom: "Janitor Trolley", conditionStatus: "Good" },
+  // Room Assets & Electronics
+  { id: "inv-9", assetCode: "AST-RM102-AC", name: "AC Daikin Inverter 1 PK", quantity: 1, minQuantity: 1, category: "Room Assets", assignedRoom: "Kamar 102", conditionStatus: "Good", notes: "Filter dibersihkan tiap bulan" },
+  { id: "inv-10", assetCode: "AST-RM102-TV", name: "Smart TV Samsung 43 Inch 4K", quantity: 1, minQuantity: 1, category: "Room Assets", assignedRoom: "Kamar 102", conditionStatus: "Good" },
+  { id: "inv-11", assetCode: "AST-RM105-FRIDGE", name: "Kulkas Mini Portable Hisense 46L", quantity: 1, minQuantity: 1, category: "Room Assets", assignedRoom: "Kamar 105", conditionStatus: "Good" },
+  { id: "inv-12", assetCode: "AST-RM201-HEATER", name: "Water Heater Listrik Ariston 15L", quantity: 1, minQuantity: 1, category: "Room Assets", assignedRoom: "Kamar 201", conditionStatus: "Needs Maintenance", notes: "Tekanan air perlu dicek berkala" },
+  { id: "inv-13", assetCode: "AST-RM205-DRYER", name: "Hair Dryer Philips 1200W", quantity: 1, minQuantity: 1, category: "Room Assets", assignedRoom: "Kamar 205", conditionStatus: "Good" },
+  { id: "inv-14", assetCode: "AST-RM102-SAFE", name: "Digital Safety Box Brankas Baja", quantity: 1, minQuantity: 1, category: "Room Assets", assignedRoom: "Kamar 102", conditionStatus: "Good" }
 ];
 
 const defaultSchedules: ShiftRoster[] = [
@@ -118,9 +126,30 @@ export default function HousekeepingInventory({
   const [activeSubTab, setActiveSubTab] = useState<"workspace" | "inventory" | "history" | "roster">("workspace");
 
   // Local state persisted in localStorage
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
+  const [inventory, setInventory] = useState<InventoryItemWithAsset[]>(() => {
     const saved = localStorage.getItem("pmspro_housekeeping_inventory");
-    return saved ? JSON.parse(saved) : defaultInventory;
+    if (saved) {
+      try {
+        const parsed: InventoryItemWithAsset[] = JSON.parse(saved);
+        // Ensure every item has an asset code and category
+        const enriched = parsed.map((it, idx) => ({
+          ...it,
+          assetCode: it.assetCode || `AST-${(it.category || "GEN").toUpperCase().slice(0, 3)}-${String(idx + 1).padStart(2, "0")}`,
+          category: it.category || "Amenities",
+          conditionStatus: it.conditionStatus || (it.quantity <= (it.minQuantity || 5) ? "Needs Maintenance" : "Good"),
+          assignedRoom: it.assignedRoom || "Gudang Logistik"
+        }));
+        // Merge default room assets if not present
+        const hasRoomAssets = enriched.some((it) => it.category === "Room Assets");
+        if (!hasRoomAssets) {
+          return [...enriched, ...defaultInventory.filter(d => d.category === "Room Assets")];
+        }
+        return enriched;
+      } catch {
+        return defaultInventory;
+      }
+    }
+    return defaultInventory;
   });
 
   const [logs, setLogs] = useState<HousekeepingLog[]>(() => {
@@ -132,6 +161,11 @@ export default function HousekeepingInventory({
     const saved = localStorage.getItem("pmspro_housekeeping_schedules");
     return saved ? JSON.parse(saved) : defaultSchedules;
   });
+
+  // QR Scanner Modal State
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  // QR Tag Print Modal State
+  const [selectedTagItem, setSelectedTagItem] = useState<InventoryItemWithAsset | null>(null);
 
   // Save to localStorage whenever state changes
   useEffect(() => {
@@ -152,14 +186,17 @@ export default function HousekeepingInventory({
 
   // Inventory Filters & Form
   const [invQuery, setInvQuery] = useState("");
-  const [invFilterCat, setInvFilterCat] = useState<"all" | "Consumables" | "Linens" | "Amenities" | "Tools">("all");
+  const [invFilterCat, setInvFilterCat] = useState<"all" | "Consumables" | "Linens" | "Amenities" | "Tools" | "Room Assets">("all");
   const [showAddInvForm, setShowAddInvForm] = useState(false);
 
   // New Inventory Item form states
   const [newInvName, setNewInvName] = useState("");
-  const [newInvQty, setNewInvQty] = useState(20);
-  const [newInvMinQty, setNewInvMinQty] = useState(5);
-  const [newInvCat, setNewInvCat] = useState<InventoryItem["category"]>("Amenities");
+  const [newInvQty, setNewInvQty] = useState(1);
+  const [newInvMinQty, setNewInvMinQty] = useState(1);
+  const [newInvCat, setNewInvCat] = useState<InventoryItemWithAsset["category"]>("Room Assets");
+  const [newInvAssetCode, setNewInvAssetCode] = useState("");
+  const [newInvRoom, setNewInvRoom] = useState("Kamar 102");
+  const [newInvStatus, setNewInvStatus] = useState<InventoryItemWithAsset["conditionStatus"]>("Good");
 
   // Interactive Cleaning Task Modal
   const [activeCleanModalUnit, setActiveCleanModalUnit] = useState<Unit | null>(null);
@@ -287,22 +324,50 @@ export default function HousekeepingInventory({
   // Add new item into local storage inventory
   const handleAddNewInventoryItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newInvName.trim()) return alert("Masukkan nama barang!");
+    if (!newInvName.trim()) return alert("Masukkan nama barang / perlengkapan!");
 
-    const newItem: InventoryItem = {
+    const generatedCode = newInvAssetCode.trim() || `AST-${(newInvCat || "GEN").toUpperCase().slice(0, 3)}-${Date.now().toString().slice(-4)}`;
+
+    const newItem: InventoryItemWithAsset = {
       id: "inv-" + Date.now().toString(),
+      assetCode: generatedCode,
       name: newInvName,
       quantity: Number(newInvQty),
       minQuantity: Number(newInvMinQty),
-      category: newInvCat
+      category: newInvCat,
+      assignedRoom: newInvRoom,
+      conditionStatus: newInvStatus,
+      lastUpdated: new Date().toLocaleString("id-ID", { hour12: false }) + " WIB"
     };
 
     setInventory([newItem, ...inventory]);
     setNewInvName("");
-    setNewInvQty(20);
-    setNewInvMinQty(5);
+    setNewInvQty(1);
+    setNewInvMinQty(1);
+    setNewInvAssetCode("");
     setShowAddInvForm(false);
-    alert(`Barang "${newItem.name}" terdaftar dalam database logistik.`);
+    alert(`Aset/Barang "${newItem.name}" (${newItem.assetCode}) terdaftar dalam database inventaris.`);
+  };
+
+  // Handle updates dispatched from the Housekeeping QR Scanner Modal
+  const handleUpdateItemFromScanner = (updatedItem: InventoryItemWithAsset, auditLogText: string) => {
+    setInventory((prev) =>
+      prev.map((item) => (item.id === updatedItem.id ? updatedItem : item))
+    );
+
+    // Automatically record an official log entry for transparency
+    const newLog: HousekeepingLog = {
+      id: "log-qr-" + Date.now().toString(),
+      roomNumber: updatedItem.assignedRoom?.replace(/[^0-9]/g, "") || "Aset",
+      propertyName: properties[0]?.name || "Forsdig Residence",
+      cleanType: "QR Scan & Audit Inventaris",
+      staffName: updatedItem.lastCheckedBy || "Staf Housekeeping",
+      consumedItems: [`Aset: ${updatedItem.name} (${updatedItem.assetCode || updatedItem.id})`],
+      completedAt: new Date().toLocaleString("id-ID", { hour12: false }) + " WIB",
+      notes: auditLogText
+    };
+
+    setLogs((prev) => [newLog, ...prev]);
   };
 
   // Add schedules inside Roster
@@ -373,46 +438,56 @@ export default function HousekeepingInventory({
         </div>
 
         {/* SUB NAVIGATION TAB CONTROL */}
-        <div className="flex flex-wrap gap-1 bg-slate-950/40 p-1 rounded-2xl border border-slate-700">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1 bg-slate-950/40 p-1 rounded-2xl border border-slate-700">
+            <button
+              onClick={() => setActiveSubTab("workspace")}
+              className={`px-3 py-1.5 rounded-xl font-bold uppercase transition text-[10px] cursor-pointer flex items-center gap-1.5 ${
+                activeSubTab === "workspace"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-300 hover:text-white hover:bg-slate-800"
+              }`}
+            >
+              <ClipboardCheck className="h-3.5 w-3.5" /> Workspace Kamar ({countDirty} Dirty)
+            </button>
+            <button
+              onClick={() => setActiveSubTab("inventory")}
+              className={`px-3 py-1.5 rounded-xl font-bold uppercase transition text-[10px] cursor-pointer flex items-center gap-1.5 ${
+                activeSubTab === "inventory"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-300 hover:text-white hover:bg-slate-800"
+              }`}
+            >
+              <Package className="h-3.5 w-3.5" /> Logistik & Stok {countLowStock > 0 && <span className="h-2 w-2 rounded-full bg-rose-500" />}
+            </button>
+            <button
+              onClick={() => setActiveSubTab("history")}
+              className={`px-3 py-1.5 rounded-xl font-bold uppercase transition text-[10px] cursor-pointer flex items-center gap-1.5 ${
+                activeSubTab === "history"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-300 hover:text-white hover:bg-slate-800"
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5" /> Riwayat Logs ({logs.length})
+            </button>
+            <button
+              onClick={() => setActiveSubTab("roster")}
+              className={`px-3 py-1.5 rounded-xl font-bold uppercase transition text-[10px] cursor-pointer flex items-center gap-1.5 ${
+                activeSubTab === "roster"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-300 hover:text-white hover:bg-slate-800"
+              }`}
+            >
+              <Calendar className="h-3.5 w-3.5" /> Jadwal Shift ({schedules.length})
+            </button>
+          </div>
+
           <button
-            onClick={() => setActiveSubTab("workspace")}
-            className={`px-3 py-1.5 rounded-xl font-bold uppercase transition text-[10px] cursor-pointer flex items-center gap-1.5 ${
-              activeSubTab === "workspace"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-slate-300 hover:text-white hover:bg-slate-800"
-            }`}
+            onClick={() => setIsQrScannerOpen(true)}
+            className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-wider flex items-center gap-1.5 shadow-md hover:scale-[1.02] active:scale-95 transition cursor-pointer border border-emerald-400/50"
+            title="Buka Kamera Pindai QR Aset / Perlengkapan Kamar"
           >
-            <ClipboardCheck className="h-3.5 w-3.5" /> Workspace Kamar ({countDirty} Dirty)
-          </button>
-          <button
-            onClick={() => setActiveSubTab("inventory")}
-            className={`px-3 py-1.5 rounded-xl font-bold uppercase transition text-[10px] cursor-pointer flex items-center gap-1.5 ${
-              activeSubTab === "inventory"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-slate-300 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            <Package className="h-3.5 w-3.5" /> Logistik & Stok {countLowStock > 0 && <span className="h-2 w-2 rounded-full bg-rose-500" />}
-          </button>
-          <button
-            onClick={() => setActiveSubTab("history")}
-            className={`px-3 py-1.5 rounded-xl font-bold uppercase transition text-[10px] cursor-pointer flex items-center gap-1.5 ${
-              activeSubTab === "history"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-slate-300 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            <FileText className="h-3.5 w-3.5" /> Riwayat Logs ({logs.length})
-          </button>
-          <button
-            onClick={() => setActiveSubTab("roster")}
-            className={`px-3 py-1.5 rounded-xl font-bold uppercase transition text-[10px] cursor-pointer flex items-center gap-1.5 ${
-              activeSubTab === "roster"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-slate-300 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            <Calendar className="h-3.5 w-3.5" /> Jadwal Shift ({schedules.length})
+            <Camera className="h-4 w-4" /> Pindai QR Aset
           </button>
         </div>
       </div>
@@ -613,28 +688,39 @@ export default function HousekeepingInventory({
                       </div>
 
                       {/* Operation Button */}
-                      {isDirty ? (
+                      <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => {
-                            setActiveCleanModalUnit(unit);
-                            // Preselect staff
-                            if (areaMatched) setAssignedStaff(areaMatched.staffName);
+                            setIsQrScannerOpen(true);
                           }}
-                          className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold uppercase rounded-xl transition flex items-center gap-1 cursor-pointer"
+                          className="px-2 py-1.5 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-xl border border-slate-200 flex items-center gap-1 font-bold text-[9px] uppercase transition cursor-pointer"
+                          title="Pindai QR Aset / Perlengkapan Kamar Ini"
                         >
-                          Selesaikan ✔️
+                          <Camera className="h-3 w-3 text-emerald-600" /> Pindai Aset
                         </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            onUpdateUnitStatus(unit.id, "Cleaning");
-                            registerInternalLog(`Room ${unit.unitNumber} marked as DIRTY/NEED CLEANING.`);
-                          }}
-                          className="px-2.5 py-1.5 bg-slate-150 hover:bg-slate-200 text-slate-800 font-extrabold uppercase rounded-xl transition cursor-pointer"
-                        >
-                          Tugaskan Sapu 🧹
-                        </button>
-                      )}
+                        {isDirty ? (
+                          <button
+                            onClick={() => {
+                              setActiveCleanModalUnit(unit);
+                              // Preselect staff
+                              if (areaMatched) setAssignedStaff(areaMatched.staffName);
+                            }}
+                            className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold uppercase rounded-xl transition flex items-center gap-1 cursor-pointer"
+                          >
+                            Selesaikan ✔️
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              onUpdateUnitStatus(unit.id, "Cleaning");
+                              registerInternalLog(`Room ${unit.unitNumber} marked as DIRTY/NEED CLEANING.`);
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-150 hover:bg-slate-200 text-slate-800 font-extrabold uppercase rounded-xl transition cursor-pointer"
+                          >
+                            Tugaskan Sapu 🧹
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -656,17 +742,17 @@ export default function HousekeepingInventory({
                   <h3 className="text-xs font-black text-slate-850 uppercase tracking-wider flex items-center gap-1.5">
                     <PlusCircle className="text-emerald-500 h-4 w-4" /> Registrasi Logistik Baru
                   </h3>
-                  <p className="text-[10px] text-gray-450 mt-0.5">Tambah jenis barang konsumsi tamu hotel atau kosan</p>
+                  <p className="text-[10px] text-gray-450 mt-0.5">Tambah aset kamar (AC, TV, Kulkas) atau amandemen logistik</p>
                 </div>
               </div>
 
               <form onSubmit={handleAddNewInventoryItem} className="space-y-3 font-sans">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase block">Nama Barang Logistik *</label>
+                  <label className="text-[9px] font-black text-gray-500 uppercase block">Nama Barang / Aset Kamar *</label>
                   <input
                     type="text"
                     required
-                    placeholder="Contoh: Slipper Sendal Tamu Putih"
+                    placeholder="Contoh: AC Daikin Inverter 1 PK / Sabun Mini"
                     value={newInvName}
                     onChange={(e) => setNewInvName(e.target.value)}
                     className="w-full text-slate-800 p-2.5 border border-slate-200 rounded-xl bg-slate-50/50 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -675,58 +761,99 @@ export default function HousekeepingInventory({
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-500 uppercase block">Stok Awal</label>
+                    <label className="text-[9px] font-black text-gray-500 uppercase block">Kode Aset / QR (Unik)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. AST-RM102-AC (Otomatis jika kosong)"
+                      value={newInvAssetCode}
+                      onChange={(e) => setNewInvAssetCode(e.target.value)}
+                      className="w-full text-slate-800 p-2 border border-slate-200 rounded-xl bg-slate-50/50 text-xs font-mono focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase block">Lokasi / Kamar Terpasang</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Kamar 102 / Gudang Linen"
+                      value={newInvRoom}
+                      onChange={(e) => setNewInvRoom(e.target.value)}
+                      className="w-full text-slate-800 p-2 border border-slate-200 rounded-xl bg-slate-50/50 text-xs focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase block">Jumlah Unit</label>
                     <input
                       type="number"
                       required
                       min={0}
                       value={newInvQty}
                       onChange={(e) => setNewInvQty(Number(e.target.value))}
-                      className="w-full text-slate-800 p-2.5 border border-slate-200 rounded-xl bg-slate-50/50 text-xs focus:bg-white focus:outline-none"
+                      className="w-full text-slate-800 p-2 border border-slate-200 rounded-xl bg-slate-50/50 text-xs focus:bg-white focus:outline-none"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-500 uppercase block">Alasan Limit (Min Qty)</label>
+                    <label className="text-[9px] font-black text-gray-500 uppercase block">Batas Min (Restock)</label>
                     <input
                       type="number"
                       required
                       min={1}
                       value={newInvMinQty}
                       onChange={(e) => setNewInvMinQty(Number(e.target.value))}
-                      className="w-full text-slate-800 p-2.5 border border-slate-200 rounded-xl bg-slate-50/50 text-xs focus:bg-white focus:outline-none"
+                      className="w-full text-slate-800 p-2 border border-slate-200 rounded-xl bg-slate-50/50 text-xs focus:bg-white focus:outline-none"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase block">Klasifikasi Kategori</label>
-                  <select
-                    value={newInvCat}
-                    onChange={(e) => setNewInvCat(e.target.value as any)}
-                    className="w-full text-slate-800 p-2.5 border border-slate-200 rounded-xl bg-white text-xs cursor-pointer focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="Amenities">Amenities (Sabun, Sampo, Sikat gigi)</option>
-                    <option value="Linens">Linens (Sprei kasur, Seimut, Handuk)</option>
-                    <option value="Consumables">Consumables (Cairan sabun pel, Token, Tissue)</option>
-                    <option value="Tools">Tools (Sapu, Kain lap micro, Vakum debu)</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase block">Klasifikasi Kategori</label>
+                    <select
+                      value={newInvCat}
+                      onChange={(e) => setNewInvCat(e.target.value as any)}
+                      className="w-full text-slate-800 p-2 border border-slate-200 rounded-xl bg-white text-xs cursor-pointer focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="Room Assets">Room Assets (AC, TV, Kulkas, Elektronik)</option>
+                      <option value="Amenities">Amenities (Sabun, Sampo, Sikat gigi)</option>
+                      <option value="Linens">Linens (Sprei, Selimut, Handuk)</option>
+                      <option value="Consumables">Consumables (Cairan sabun, Tissue)</option>
+                      <option value="Tools">Tools (Sapu, Kain micro, Vakum)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase block">Kondisi Fisik</label>
+                    <select
+                      value={newInvStatus}
+                      onChange={(e) => setNewInvStatus(e.target.value as any)}
+                      className="w-full text-slate-800 p-2 border border-slate-200 rounded-xl bg-white text-xs cursor-pointer focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="Good">Baik / Berfungsi Normal</option>
+                      <option value="Needs Maintenance">Perlu Servis / Maintenance</option>
+                      <option value="In Laundry">Dalam Laundry / Cuci</option>
+                      <option value="Damaged">Rusak Fisik</option>
+                    </select>
+                  </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-[10px] tracking-wide"
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-[10px] tracking-wide shadow-sm"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Daftarkan ke Gudang
+                  <Plus className="h-3.5 w-3.5" /> Simpan & Generate Label QR
                 </button>
               </form>
             </div>
 
             {/* QUICK NOTIFICATION GUDANG BANNER */}
-            <div className="bg-slate-550 bg-slate-900 p-4.5 rounded-3xl text-left text-white border border-slate-800 space-y-2.5">
-              <span className="text-[8px] font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded uppercase">Integrasi Logistik</span>
+            <div className="bg-slate-900 p-4.5 rounded-3xl text-left text-white border border-slate-800 space-y-2.5">
+              <span className="text-[8px] font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded uppercase">QR Code Audit & Tracking</span>
               <p className="text-[10px] text-slate-300 font-semibold leading-normal">
-                Sistem amandemen inventaris ini akan auto-mengurangi stok sprei/sabun/amenities setiap kali tim housekeeping menyelesaikan checklist checklist pembersihan kamar.
+                Setiap aset kamar memiliki kode QR unik. Staf housekeeping cukup memindai dengan kamera HP / laptop untuk memeriksa riwayat, memperbarui jumlah, atau melaporkan kerusakan unit secara instan.
               </p>
             </div>
           </div>
@@ -734,21 +861,31 @@ export default function HousekeepingInventory({
           {/* RIGHT COLUMNS: TABLE & INVENTORIES LOG */}
           <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4 text-left lg:col-span-2">
             
-            {/* INLINE FILTER BAR */}
+            {/* INLINE FILTER BAR & CAMERA SCAN BUTTON */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="relative flex-1 w-full max-w-xs">
-                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Cari item logistik..."
-                  value={invQuery}
-                  onChange={(e) => setInvQuery(e.target.value)}
-                  className="w-full bg-slate-50 pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white"
-                />
+              <div className="flex items-center gap-2 w-full sm:w-auto flex-1 max-w-md">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Cari aset kamar, kode QR, sprei..."
+                    value={invQuery}
+                    onChange={(e) => setInvQuery(e.target.value)}
+                    className="w-full bg-slate-50 pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white"
+                  />
+                </div>
+
+                <button
+                  onClick={() => setIsQrScannerOpen(true)}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold uppercase text-[10px] transition cursor-pointer flex items-center gap-1.5 shadow-sm whitespace-nowrap shrink-0"
+                  title="Pindai Kode QR Aset dengan Kamera"
+                >
+                  <Camera className="h-3.5 w-3.5" /> Pindai QR Kamera
+                </button>
               </div>
 
               <div className="flex flex-wrap gap-1">
-                {(["all", "Amenities", "Linens", "Consumables", "Tools"] as const).map((cat) => (
+                {(["all", "Room Assets", "Amenities", "Linens", "Consumables", "Tools"] as const).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setInvFilterCat(cat)}
@@ -758,7 +895,7 @@ export default function HousekeepingInventory({
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
                   >
-                    {cat === "all" ? "Semua" : cat}
+                    {cat === "all" ? "Semua" : cat === "Room Assets" ? "Aset Kamar" : cat}
                   </button>
                 ))}
               </div>
@@ -769,29 +906,72 @@ export default function HousekeepingInventory({
               <table className="w-full text-left border-collapse font-mono">
                 <thead>
                   <tr className="bg-slate-50 text-[9px] font-extrabold uppercase text-slate-400 border-b border-slate-150">
-                    <th className="py-2.5 px-3">Nama Gudang Logistik / Kategori</th>
+                    <th className="py-2.5 px-3">Kode Aset / QR</th>
+                    <th className="py-2.5 px-3">Perlengkapan & Lokasi</th>
                     <th className="py-2.5 px-3 text-center">Tersedia</th>
-                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3">Kondisi Status</th>
                     <th className="py-2.5 px-3 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[10px]">
                   {inventory
                     .filter(item => {
-                      if (invQuery && !item.name.toLowerCase().includes(invQuery.toLowerCase())) return false;
+                      const query = invQuery.toLowerCase();
+                      if (query) {
+                        const matchName = item.name.toLowerCase().includes(query);
+                        const matchCode = (item.assetCode || item.id).toLowerCase().includes(query);
+                        const matchRoom = (item.assignedRoom || "").toLowerCase().includes(query);
+                        if (!matchName && !matchCode && !matchRoom) return false;
+                      }
                       if (invFilterCat !== "all" && item.category !== invFilterCat) return false;
                       return true;
                     })
                     .map((item) => {
                       const isLow = item.quantity <= item.minQuantity;
+                      const cond = item.conditionStatus || "Good";
+
                       return (
-                        <tr key={item.id} className="hover:bg-slate-50/40 divide-x divide-slate-100">
+                        <tr key={item.id} className="hover:bg-slate-50/50 divide-x divide-slate-100">
+                          {/* Asset Code & QR Button */}
                           <td className="py-3 px-3">
-                            <strong className="text-slate-800 font-sans">{item.name}</strong>
-                            <p className="text-[9px] text-slate-400 font-sans font-bold flex items-center gap-1 uppercase mt-0.5">
-                              <Layers className="h-2.5 w-2.5 text-slate-400" /> {item.category}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setSelectedTagItem(item)}
+                                className="p-1.5 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg border border-slate-200 transition cursor-pointer group/qr"
+                                title="Lihat & Cetak Tag QR Aset"
+                              >
+                                <QrCode className="h-4 w-4 text-slate-600 group-hover/qr:text-emerald-600" />
+                              </button>
+                              <div className="text-left">
+                                <span className="font-mono font-bold text-slate-900 block text-[10px]">
+                                  {item.assetCode || item.id}
+                                </span>
+                                <button
+                                  onClick={() => setSelectedTagItem(item)}
+                                  className="text-[8px] font-black uppercase text-emerald-600 hover:underline cursor-pointer flex items-center gap-0.5"
+                                >
+                                  🏷️ Cetak QR
+                                </button>
+                              </div>
+                            </div>
                           </td>
+
+                          {/* Item details */}
+                          <td className="py-3 px-3">
+                            <strong className="text-slate-800 font-sans text-xs">{item.name}</strong>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5 font-sans">
+                              <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 text-[9px] rounded font-bold uppercase">
+                                {item.category}
+                              </span>
+                              {item.assignedRoom && (
+                                <span className="text-[9px] text-emerald-700 font-bold flex items-center gap-0.5">
+                                  <MapPin className="h-2.5 w-2.5" /> {item.assignedRoom}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Stock Quantity */}
                           <td className="py-3 px-3 text-center font-bold">
                             <span className={`px-2 py-1 rounded-md ${
                               isLow ? "bg-red-50 text-red-700 font-black text-xs" : "bg-slate-100 text-slate-800"
@@ -799,19 +979,48 @@ export default function HousekeepingInventory({
                               {item.quantity} Unit
                             </span>
                           </td>
-                          <td className="py-3 px-3 font-semibold">
-                            {isLow ? (
-                              <span className="px-1.5 py-0.5 bg-red-100 text-red-900 border border-red-200 rounded text-[8px] font-black uppercase flex items-center gap-1 animate-pulse font-sans w-max">
-                                <AlertTriangle className="h-3 w-3" /> RESTOCK
+
+                          {/* Condition Status */}
+                          <td className="py-3 px-3 font-semibold font-sans">
+                            {cond === "Good" && (
+                              <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[8px] font-black uppercase flex items-center gap-1 w-max">
+                                <Check className="h-3 w-3 text-emerald-600" /> BAIK / NORMAL
                               </span>
-                            ) : (
-                              <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded text-[8px] font-black uppercase flex items-center gap-1 font-sans w-max">
-                                <Check className="h-3 w-3 text-emerald-600" /> OK
+                            )}
+                            {cond === "Needs Maintenance" && (
+                              <span className="px-1.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-200 rounded text-[8px] font-black uppercase flex items-center gap-1 w-max">
+                                <AlertTriangle className="h-3 w-3 text-amber-600" /> PERLU SERVIS
+                              </span>
+                            )}
+                            {cond === "In Laundry" && (
+                              <span className="px-1.5 py-0.5 bg-sky-50 text-sky-800 border border-sky-200 rounded text-[8px] font-black uppercase flex items-center gap-1 w-max">
+                                <RefreshCw className="h-3 w-3 text-sky-600" /> DALAM LAUNDRY
+                              </span>
+                            )}
+                            {cond === "Damaged" && (
+                              <span className="px-1.5 py-0.5 bg-rose-50 text-rose-800 border border-rose-200 rounded text-[8px] font-black uppercase flex items-center gap-1 w-max animate-pulse">
+                                <AlertTriangle className="h-3 w-3 text-rose-600" /> RUSAK FISIK
+                              </span>
+                            )}
+                            {cond === "Missing" && (
+                              <span className="px-1.5 py-0.5 bg-purple-50 text-purple-800 border border-purple-200 rounded text-[8px] font-black uppercase flex items-center gap-1 w-max">
+                                ❓ HILANG
                               </span>
                             )}
                           </td>
+
+                          {/* Action Buttons */}
                           <td className="py-3 px-3 text-right">
-                            <div className="flex justify-end gap-1 font-sans">
+                            <div className="flex justify-end items-center gap-1 font-sans">
+                              {/* Fast QR Scan / Audit Modal Trigger */}
+                              <button
+                                onClick={() => setIsQrScannerOpen(true)}
+                                className="p-1 px-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-md border border-emerald-300 flex items-center gap-1 cursor-pointer font-bold text-[9px]"
+                                title="Audit & Perbarui Status via QR / Kamera"
+                              >
+                                <Camera className="h-3 w-3 text-emerald-600" /> Audit
+                              </button>
+
                               {/* Dec */}
                               <button
                                 onClick={() => handleQuickQuantityChange(item.id, -1)}
@@ -823,7 +1032,7 @@ export default function HousekeepingInventory({
                               {/* Restock */}
                               <button
                                 onClick={() => handleQuickQuantityChange(item.id, 10)}
-                                className="p-1 px-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-md border border-emerald-300 flex items-center gap-0.5 cursor-pointer font-black"
+                                className="p-1 px-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md border border-slate-300 flex items-center gap-0.5 cursor-pointer font-black"
                                 title="Tambah 10"
                               >
                                 <Plus className="h-3 w-3" /> 10
@@ -1341,6 +1550,27 @@ export default function HousekeepingInventory({
           </form>
         </div>
       )}
+
+      {/* Housekeeping Camera QR Scanner Modal */}
+      <HousekeepingQrScannerModal
+        isOpen={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        inventory={inventory}
+        onUpdateItem={handleUpdateItemFromScanner}
+        staffList={employees.map(e => e.name)}
+        roomList={units.map(u => `Kamar ${u.unitNumber}`)}
+      />
+
+      {/* Housekeeping Asset QR Tag Printable Modal */}
+      <HousekeepingQrTagModal
+        isOpen={!!selectedTagItem}
+        onClose={() => setSelectedTagItem(null)}
+        item={selectedTagItem}
+        propertyName={properties[0]?.name || "Forsdig Residence"}
+        onTestScan={(code) => {
+          setIsQrScannerOpen(true);
+        }}
+      />
 
     </div>
   );

@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import {
   isSupabaseConfigured,
-  getSupabaseInitSQL
+  getSupabaseInitSQL,
+  getWorkChatsMigrationSQL
 } from "../lib/supabase";
 
 interface SupabaseModuleProps {
@@ -37,15 +38,19 @@ export default function SupabaseModule({
   const [helpOpen, setHelpOpen] = useState(false);
 
   const isConfigured = isSupabaseConfigured();
-  const sqlCode = getSupabaseInitSQL();
+  const [selectedSqlTab, setSelectedSqlTab] = useState<"full" | "work_chats">("work_chats");
+  const fullSqlCode = getSupabaseInitSQL();
+  const workChatsSqlCode = getWorkChatsMigrationSQL();
+  const activeSqlCode = selectedSqlTab === "work_chats" ? workChatsSqlCode : fullSqlCode;
 
   const handleCopySql = () => {
-    navigator.clipboard.writeText(sqlCode);
+    navigator.clipboard.writeText(activeSqlCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const syncTables = [
+    { displayName: "Chat Kerja & Tim (work_chats)", dbName: "work_chats", desc: "Komunikasi real-time obrolan staf, channel umum, dan koordinasi" },
     { displayName: "Properti (properties)", dbName: "properties", desc: "Menampung seluruh data portofolio bangunan/villa" },
     { displayName: "Kamar & Unit (units)", dbName: "units", desc: "Menampung detail sewa, tipe unit, dan ketersediaan" },
     { displayName: "Daftar Tenant (tenants)", dbName: "tenants", desc: "Menampung profil penyewa dan kontak darurat" },
@@ -236,18 +241,50 @@ export default function SupabaseModule({
         {/* RIGHT PANEL: SQL INSTRUCTION & COPY CODES */}
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <FileCode className="h-5 w-5 text-emerald-600 shrink-0" />
-              <h3 className="font-extrabold text-slate-800 text-sm">Skema Inisialisasi Database</h3>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <FileCode className="h-5 w-5 text-emerald-600 shrink-0" />
+                <h3 className="font-extrabold text-slate-800 text-sm">Skema Database & Migrasi</h3>
+              </div>
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[11px] font-semibold">
+                <button
+                  onClick={() => setSelectedSqlTab("work_chats")}
+                  className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                    selectedSqlTab === "work_chats"
+                      ? "bg-white text-emerald-700 shadow-xs font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  ⚡ Migration work_chats
+                </button>
+                <button
+                  onClick={() => setSelectedSqlTab("full")}
+                  className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                    selectedSqlTab === "full"
+                      ? "bg-white text-emerald-700 shadow-xs font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Semua Tabel
+                </button>
+              </div>
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed">
-              Jalankan skrip ini sekali di konsol <strong>SQL Editor</strong> Supabase Anda untuk membuat relasi tabel, tipe data yang benar, serta aturan Row-Level-Security (RLS).
+              {selectedSqlTab === "work_chats" ? (
+                <span>
+                  Skrip migrasi khusus untuk tabel <strong>public.work_chats</strong> dengan kolom UUID, timestamp, foreign key, RLS policies aman, serta publikasi realtime.
+                </span>
+              ) : (
+                <span>
+                  Jalankan skrip ini sekali di konsol <strong>SQL Editor</strong> Supabase Anda untuk membuat relasi tabel, tipe data yang benar, serta aturan Row-Level-Security (RLS).
+                </span>
+              )}
             </p>
 
             <div className="relative">
               <pre className="p-3 bg-slate-900 text-slate-300 text-[10px] font-mono rounded-xl h-[260px] overflow-y-auto overflow-x-hidden border border-slate-800 text-left select-all leading-relaxed whitespace-pre-wrap">
-                {sqlCode}
+                {activeSqlCode}
               </pre>
               
               <div className="absolute bottom-2 right-2">

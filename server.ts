@@ -47,6 +47,153 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// Mock/cached storage for public.work_chats
+let workChatsDb = [
+  {
+    id: "a0000001-0000-4000-8000-000000000001",
+    sender_name: "Budi Santoso",
+    sender_role: "Owner",
+    channel: "#umum",
+    message: "Selamat pagi semua. Kanal chat kerja real-time sekarang sudah aktif untuk koordinasi kerja harian kita!",
+    user_id: null,
+    created_at: new Date(Date.now() - 3600000 * 48).toISOString(),
+    updated_at: new Date(Date.now() - 3600000 * 48).toISOString()
+  },
+  {
+    id: "a0000001-0000-4000-8000-000000000002",
+    sender_name: "Dewi Lestari",
+    sender_role: "Manager",
+    channel: "#umum",
+    message: "Terima kasih Pak Budi. Teman-teman staf lainnya, mohon lapor setiap perkembangan di lapangan melalui grup chat di bawah ini ya.",
+    user_id: null,
+    created_at: new Date(Date.now() - 3600000 * 47).toISOString(),
+    updated_at: new Date(Date.now() - 3600000 * 47).toISOString()
+  },
+  {
+    id: "a0000001-0000-4000-8000-000000000003",
+    sender_name: "Rudi Tabuti",
+    sender_role: "Staff Maintenance",
+    channel: "#perbaikan-teknis",
+    message: "Laporan: AC bocor di kamar 102 lantai 1 sudah selesai diperbaiki dan di-service freon-nya. Status kamar aman untuk disewakan kembali.",
+    user_id: null,
+    created_at: new Date(Date.now() - 3600000 * 12).toISOString(),
+    updated_at: new Date(Date.now() - 3600000 * 12).toISOString()
+  },
+  {
+    id: "a0000001-0000-4000-8000-000000000004",
+    sender_name: "Siti Rahma",
+    sender_role: "Finance",
+    channel: "#keuangan-admin",
+    message: "Tagihan sewa bulanan untuk Bapak Rian Hidayat (kamar 101) sudah lunas terkonfirmasi hari ini. Data billing di sistem sudah saya update.",
+    user_id: null,
+    created_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+    updated_at: new Date(Date.now() - 3600000 * 8).toISOString()
+  },
+  {
+    id: "a0000001-0000-4000-8000-000000000005",
+    sender_name: "Anton Hartono",
+    sender_role: "Receptionist",
+    channel: "#penyewa-bantuan",
+    message: "Tamu kamar 204 menanyakan tentang password wifi yang baru berjalan lambat. Apakah ada gangguan ISP?",
+    user_id: null,
+    created_at: new Date(Date.now() - 1800000).toISOString(),
+    updated_at: new Date(Date.now() - 1800000).toISOString()
+  },
+  {
+    id: "a0000001-0000-4000-8000-000000000006",
+    sender_name: "Dewi Lestari",
+    sender_role: "Manager",
+    channel: "#penyewa-bantuan",
+    message: "Tadi server pusat ISP menginfokan perbaikan link kabel utama. Estimasi bandwith kembali normal 10 menit lagi ya Anton.",
+    user_id: null,
+    created_at: new Date(Date.now() - 900000).toISOString(),
+    updated_at: new Date(Date.now() - 900000).toISOString()
+  }
+];
+
+// Supabase REST work_chats endpoints (supporting GET, POST, DELETE)
+app.get("/rest/v1/work_chats", async (req, res) => {
+  let supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+  if (supabaseUrl.startsWith("//")) supabaseUrl = "https:" + supabaseUrl;
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (supabaseUrl && anonKey && !supabaseUrl.includes("MY_SUPABASE")) {
+    try {
+      const targetUrl = new URL(`/rest/v1/work_chats${req.url.replace(/^\/rest\/v1\/work_chats/, "")}`, supabaseUrl).toString();
+      const remoteRes = await fetch(targetUrl, {
+        headers: {
+          apikey: anonKey,
+          Authorization: req.headers.authorization || `Bearer ${anonKey}`,
+          Accept: req.headers.accept || "application/json"
+        }
+      });
+      if (remoteRes.ok) {
+        const data = await remoteRes.json();
+        res.setHeader("content-type", "application/json; charset=utf-8");
+        return res.status(200).json(data);
+      }
+    } catch (e) {
+      console.warn("Could not proxy to Supabase work_chats:", e);
+    }
+  }
+
+  let results = [...workChatsDb];
+  const channelQuery = req.query.channel as string;
+  if (channelQuery && channelQuery.startsWith("eq.")) {
+    const targetChannel = channelQuery.slice(3);
+    results = results.filter((m) => m.channel === targetChannel);
+  }
+
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  return res.status(200).json(results);
+});
+
+app.post("/rest/v1/work_chats", async (req, res) => {
+  const body = Array.isArray(req.body) ? req.body : [req.body];
+  let supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+  if (supabaseUrl.startsWith("//")) supabaseUrl = "https:" + supabaseUrl;
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (supabaseUrl && anonKey && !supabaseUrl.includes("MY_SUPABASE")) {
+    try {
+      const targetUrl = new URL("/rest/v1/work_chats", supabaseUrl).toString();
+      const remoteRes = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          apikey: anonKey,
+          Authorization: req.headers.authorization || `Bearer ${anonKey}`,
+          "Content-Type": "application/json",
+          Prefer: (req.headers.prefer as string) || "return=representation"
+        },
+        body: JSON.stringify(body)
+      });
+      if (remoteRes.ok) {
+        const data = await remoteRes.json().catch(() => body);
+        return res.status(201).json(data);
+      }
+    } catch (e) {
+      console.warn("Could not proxy POST to Supabase work_chats:", e);
+    }
+  }
+
+  for (const item of body) {
+    const newRecord = {
+      id: item.id || (typeof crypto !== "undefined" && (crypto as any).randomUUID ? (crypto as any).randomUUID() : "a0000000-0000-4000-8000-" + Date.now().toString().padStart(12, "0")),
+      sender_name: item.sender_name || item.senderName || "User",
+      sender_role: item.sender_role || item.senderRole || "Staff",
+      channel: item.channel || "#umum",
+      message: item.message || "",
+      user_id: item.user_id || null,
+      created_at: item.created_at || new Date().toISOString(),
+      updated_at: item.updated_at || new Date().toISOString()
+    };
+    workChatsDb.push(newRecord);
+  }
+
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  return res.status(201).json(body);
+});
+
 app.post("/api/gemini/analyze", async (req, res) => {
   try {
     const { reportData, promptType } = req.body;

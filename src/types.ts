@@ -104,6 +104,32 @@ export interface InvoiceItem {
   amount: number;
 }
 
+export type WhatsAppStatus = "Belum Terkirim" | "Terkirim" | "Dibaca" | "Gagal";
+
+export interface WhatsAppSchedulerLog {
+  id: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  tenantName: string;
+  tenantPhone: string;
+  unitName: string;
+  amount: number;
+  dueDate: string;
+  triggerType: "H-3 Reminder" | "H-7 Reminder" | "H-1 Reminder" | "Hari H" | "Manual Batch";
+  executedAt: string;
+  status: "Success" | "Failed" | "Queued";
+  messagePreview: string;
+}
+
+export interface WhatsAppSchedulerConfig {
+  isEnabled: boolean;
+  daysBeforeDue: number; // default 3 for H-3
+  scheduledTime: string; // e.g. "09:00"
+  targetStatus: ("Unpaid" | "Overdue")[];
+  autoMarkSent: boolean;
+  customTemplate: string;
+}
+
 export interface Invoice {
   id: string;
   tenantId: string;
@@ -116,6 +142,9 @@ export interface Invoice {
   totalAmount: number;
   dueDate: string;
   status: PaymentStatus;
+  whatsappStatus?: WhatsAppStatus;
+  whatsappSentAt?: string;
+  whatsappPhone?: string;
   createdAt: string;
 }
 
@@ -211,6 +240,8 @@ export interface WorkChatMessage {
   channel: string;
   message: string;
   createdAt: string;
+  updatedAt?: string;
+  userId?: string;
 }
 
 export interface Employee {

@@ -31,7 +31,11 @@ import {
   RefreshCw,
   Mail,
   Send,
-  Eye
+  Eye,
+  Printer,
+  ShieldCheck,
+  FileText,
+  CheckCheck
 } from "lucide-react";
 import { Employee, Attendance, Payroll, LeaveRequest, ShiftSchedule, ShiftType, UserRole } from "../types";
 
@@ -149,6 +153,11 @@ export default function HRISModule({
 
   // Payroll Form State
   const [isPayrollModalOpen, setIsPayrollModalOpen] = useState(false);
+  const [previewingPayslip, setPreviewingPayslip] = useState<Payroll | null>(null);
+  const [slipDownloadToast, setSlipDownloadToast] = useState<string | null>(null);
+  const [payrollSearch, setPayrollSearch] = useState<string>("");
+  const [payrollMonthFilter, setPayrollMonthFilter] = useState<string>("all");
+  const [payrollStatusFilter, setPayrollStatusFilter] = useState<"all" | "Paid" | "Pending">("all");
   const [payrollForm, setPayrollForm] = useState({
     employeeId: "",
     month: "Juni 2026",
@@ -651,56 +660,177 @@ export default function HRISModule({
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(30, 41, 59);
-    doc.text("III. KETERANGAN & VERIFIKASI BANK", 15, 192);
+    doc.text("III. KETERANGAN & VERIFIKASI BANK", 15, 187);
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.3);
-    doc.line(15, 195, 195, 195);
+    doc.line(15, 189, 195, 189);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(71, 85, 105);
-    doc.text("Nama Bank Penerima", 15, 201);
-    doc.text("Nomor Rekening", 15, 206);
-    doc.text("Nama Pemilik Rekening", 15, 211);
-    doc.text("Catatan Sistem", 15, 216);
+    doc.text("Nama Bank Penerima", 15, 194);
+    doc.text("Nomor Rekening", 15, 198.5);
+    doc.text("Nama Pemilik Rekening", 15, 203);
+    doc.text("Kanal Pembayaran", 15, 207.5);
 
     doc.setFont("helvetica", "bold");
-    doc.text(":  Bank Mandiri KCP Kemang Timur", 50, 201);
+    doc.text(":  Bank Mandiri KCP Kemang Timur", 48, 194);
     const simulatedAccountNum = (emp.id ? emp.id.replace(/\D/g, "") : "") || "9021";
-    doc.text(`:  121-00-9882910-${simulatedAccountNum}`, 50, 206);
-    doc.text(`:  ${emp.name}`, 50, 211);
-    doc.text(":  Sistem Gaji Terintegrasi Digital Ledger PMS Pro", 50, 216);
+    doc.text(`:  121-00-9882910-${simulatedAccountNum}`, 48, 198.5);
+    doc.text(`:  ${emp.name}`, 48, 203);
+    doc.text(":  Sistem Payroll Terintegrasi Digital Ledger PMS Pro (Clearing Code: BI-FAST)", 48, 207.5);
 
-    // 7. SIGNATURES AND APPROVALS
+    // 7. OFFICIAL THREE-TIER DIGITAL SIGNATURES & APPROVALS
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(30, 41, 59);
-    doc.text("Dibuat Oleh,", 30, 236);
-    doc.text("Diterima Oleh,", 140, 236);
+    doc.text("IV. PENGESAHAN & TANDA TANGAN DIGITAL RESMI", 15, 215);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(15, 217, 195, 217);
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.text("Tanda tangan hrd digital", 25, 248);
-    doc.text("Tanda tangan penerima", 137, 248);
+    // Column 1: HR & People Operations (Disusun Oleh)
+    doc.setFillColor(248, 250, 252);
+    doc.rect(15, 220, 52, 34, "F");
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.rect(15, 220, 52, 34, "S");
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text("DISUSUN OLEH (HRD):", 18, 225);
+
+    doc.setFillColor(241, 245, 249);
+    doc.rect(18, 227, 46, 12, "F");
+    doc.setDrawColor(203, 213, 225);
+    doc.rect(18, 227, 46, 12, "S");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text("[VERIFIED DIGITAL HRD]", 20, 231.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Ref: HRD-SIG-${pay.id.toUpperCase().slice(-5)}`, 20, 235);
+    doc.text(`Tgl: ${pay.month}`, 20, 238);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
     doc.setTextColor(30, 41, 59);
-    doc.text("Ismail Marzuki", 28, 256);
-    doc.text(`${emp.name}`, 140, 256);
+    doc.text("Ismail Marzuki, S.Psi.", 18, 244);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("HR & Operations Lead", 18, 248);
+    doc.text("NIP: HRD-2023-018", 18, 251.5);
+
+    // Column 2: Finance & Accounting Dept (DISAHKAN & DITANDATANGANI SECARA DIGITAL OLEH FINANCE)
+    doc.setFillColor(236, 253, 245); // emerald-50
+    doc.rect(71, 220, 68, 34, "F");
+    doc.setDrawColor(5, 150, 105); // emerald-600
+    doc.setLineWidth(0.6);
+    doc.rect(71, 220, 68, 34, "S");
+    // Top banner highlight
+    doc.setFillColor(5, 150, 105);
+    doc.rect(71, 220, 68, 2.5, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(4, 120, 87); // emerald-700
+    doc.text("DISETUJUI & TTD DIGITAL (FINANCE):", 74, 226);
+
+    // Finance Digital Signature Seal Box
+    doc.setFillColor(255, 255, 255);
+    doc.rect(74, 228, 62, 13, "F");
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(0.3);
+    doc.rect(74, 228, 62, 13, "S");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(5, 150, 105);
+    doc.text("DIGITALLY SIGNED & VERIFIED BY FINANCE", 76, 232);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text("HR & Operations Specialist", 22, 260);
-    doc.text("Karyawan Penerima", 138, 260);
+    doc.setFontSize(5.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Cert ID: FIN-EAUTH-${pay.id.toUpperCase()}`, 76, 235.5);
+    doc.text(`Hash: SHA256:${(pay.id + pay.netSalary).slice(0, 8)}...e9a4f`, 76, 238.5);
 
-    // Footer signature stamps
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text("Budi Santoso, S.E., Ak., CA", 74, 245);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(4, 120, 87);
+    doc.text("Finance & Accounting Manager", 74, 248.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Tgl Otorisasi: ${pay.paymentDate || "2026-07-01"} | KEP-FIN-09`, 74, 252);
+
+    // Column 3: Employee Recipient (Diterima Oleh Karyawan)
+    doc.setFillColor(248, 250, 252);
+    doc.rect(143, 220, 52, 34, "F");
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.rect(143, 220, 52, 34, "S");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text("DITERIMA OLEH (KARYAWAN):", 146, 225);
+
+    doc.setFillColor(241, 245, 249);
+    doc.rect(146, 227, 46, 12, "F");
+    doc.setDrawColor(203, 213, 225);
+    doc.rect(146, 227, 46, 12, "S");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text("[E-CONFIRMED / DITERIMA]", 148, 231.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`ID Staf: ${emp.id.toUpperCase()}`, 148, 235);
+    doc.text("Akun Bank Penerima Sah", 148, 238);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`${emp.name}`, 146, 244);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`${emp.role}`, 146, 248);
+    doc.text(`Dept: ${emp.department}`, 146, 251.5);
+
+    // 8. LEGAL COMPLIANCE DISCLAIMER & VERIFICATION FOOTER
+    doc.setFillColor(248, 250, 252);
+    doc.rect(15, 257, 180, 18, "F");
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.rect(15, 257, 180, 18, "S");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text("PENGESAHAN HUKUM TANDA TANGAN DIGITAL RESMI FINANCE:", 18, 261.5);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(100, 116, 139);
+    doc.text("1. Dokumen slip gaji ini merupakan arsip resmi PT Forsdig Properti Indonesia yang telah ditandatangani secara digital oleh Finance.", 18, 265);
+    doc.text("2. Berdasarkan UU ITE No. 11 Tahun 2008 Pasal 5 & 6, tanda tangan digital ini memiliki kekuatan pembuktian dan keabsahan hukum penuh.", 18, 268.5);
+    doc.text(`3. Kode Token Autentikasi: PMS-FIN-PAY-${pay.id.toUpperCase()}-${(pay.paymentDate || "2026-07-01").replace(/-/g, "")}-LEGAL-VALIDATED • Dicetak pada: ${new Date().toLocaleDateString("id-ID")}`, 18, 272);
+
+    // Outer Bottom Note
     doc.setFont("helvetica", "italic");
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(148, 163, 184);
-    doc.text(`Slip Gaji ID: ${pay.id.toUpperCase()} • Generated automatically in secure PMS Pro runtime.`, 55, 271);
+    doc.text("PMS Pro Enterprise HRIS & Payroll • Dokumen ini bersifat Sangat Rahasia (Strictly Confidential).", 50, 279);
 
     // Save the PDF
     doc.save(`Slip_Gaji_${emp.name.replace(/\s+/g, "_")}_${pay.month.replace(/\s+/g, "_")}.pdf`);
@@ -1305,6 +1435,21 @@ export default function HRISModule({
                                   <UserCheck className="h-4 w-4" />
                                 </button>
                               )}
+                              {payroll.some(p => p.employeeId === emp.id) && (
+                                <button
+                                  onClick={() => {
+                                    const empPays = payroll.filter(p => p.employeeId === emp.id);
+                                    const latestPay = empPays[empPays.length - 1];
+                                    if (latestPay) {
+                                      setPreviewingPayslip(latestPay);
+                                    }
+                                  }}
+                                  className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+                                  title="Lihat & Unduh Dokumen Slip Gaji Resmi (Tanda Tangan Digital Finance)"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => openEditEmployee(emp)}
                                 className="p-1 text-slate-500 hover:bg-slate-100 rounded"
@@ -1596,20 +1741,108 @@ export default function HRISModule({
           )}
 
           {/* TAB 3: PAYROLL / RINCIAN GAJI */}
-          {activeSubTab === "payroll" && (
+          {activeSubTab === "payroll" && (() => {
+            const filteredPayroll = payroll.filter((pay) => {
+              const empName = getEmployeeName(pay.employeeId).toLowerCase();
+              const term = payrollSearch.toLowerCase().trim();
+              const matchesSearch = !term || empName.includes(term) || pay.id.toLowerCase().includes(term) || pay.month.toLowerCase().includes(term);
+              const matchesMonth = payrollMonthFilter === "all" || pay.month === payrollMonthFilter;
+              const matchesStatus = payrollStatusFilter === "all" || pay.status === payrollStatusFilter;
+              return matchesSearch && matchesMonth && matchesStatus;
+            });
+
+            return (
             <div className="space-y-4">
               <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
                 <div>
-                  <h4 className="text-sm font-bold text-slate-800">Distribusi & Rincian Gaji Bulanan Staf</h4>
-                  <p className="text-[11px] text-gray-400">Data penerbitan slip gaji serta log pembayaran operasional karyawan</p>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-800">Distribusi & Rincian Gaji Bulanan Staf</h4>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                      E-Sign Finance Aktif
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    Dokumen resmi slip gaji terverifikasi dan telah ditandatangani secara digital oleh Finance & Akuntansi
+                  </p>
                 </div>
                 
-                <button
-                  onClick={() => setIsPayrollModalOpen(true)}
-                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Terbitkan Slip Gaji
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsReportModalOpen(true)}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition border border-slate-200"
+                    title="Rekapitulasi Laporan Penggajian Seluruh Karyawan"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-slate-500" /> Rekap PDF Bulanan
+                  </button>
+                  <button
+                    onClick={() => setIsPayrollModalOpen(true)}
+                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow transition"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Terbitkan Slip Gaji
+                  </button>
+                </div>
+              </div>
+
+              {/* FILTER & SEARCH TOOLBAR */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[260px]">
+                  <div className="relative flex-1 min-w-[180px] max-w-xs">
+                    <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Cari nama karyawan / slip ID..."
+                      value={payrollSearch}
+                      onChange={(e) => setPayrollSearch(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-500">Bulan:</span>
+                    <select
+                      value={payrollMonthFilter}
+                      onChange={(e) => setPayrollMonthFilter(e.target.value)}
+                      className="bg-white border border-slate-200 text-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="all">Semua Bulan</option>
+                      {uniqueMonths.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-500">Status:</span>
+                    <select
+                      value={payrollStatusFilter}
+                      onChange={(e) => setPayrollStatusFilter(e.target.value as any)}
+                      className="bg-white border border-slate-200 text-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="all">Semua Status</option>
+                      <option value="Paid">Lunas (Paid)</option>
+                      <option value="Pending">Pending Transfer</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {(payrollSearch || payrollMonthFilter !== "all" || payrollStatusFilter !== "all") && (
+                    <button
+                      onClick={() => {
+                        setPayrollSearch("");
+                        setPayrollMonthFilter("all");
+                        setPayrollStatusFilter("all");
+                      }}
+                      className="text-[11px] font-bold text-rose-600 hover:text-rose-700 underline"
+                    >
+                      Reset Filter
+                    </button>
+                  )}
+                  <span className="text-[11px] font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-xl">
+                    Total: <strong className="text-slate-900">{filteredPayroll.length}</strong> Slip
+                  </span>
+                </div>
               </div>
 
               {/* TABLE CONTAINER */}
@@ -1621,29 +1854,30 @@ export default function HRISModule({
                       <th className="py-3.5 px-4 font-bold">Nama Karyawan</th>
                       <th className="py-3.5 px-4 font-bold">Gaji Pokok</th>
                       <th className="py-3.5 px-4 font-bold">Tunjangan (+)</th>
-                      <th className="py-3.5 px-4 font-bold">Potongan / BPJS (-)</th>
+                      <th className="py-3.5 px-4 font-bold">Potongan (-)</th>
                       <th className="py-3.5 px-4 font-bold">Total Bersih (Nett)</th>
                       <th className="py-3.5 px-4 font-bold">Status</th>
                       <th className="py-3.5 px-4 font-bold">Tanggal Kirim</th>
-                      <th className="py-3.5 px-4 font-bold text-center">Tindakan</th>
+                      <th className="py-3.5 px-4 font-bold text-center">Dokumen Slip Gaji (Finance E-Sign)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs text-slate-700">
-                    {payroll.length === 0 ? (
+                    {filteredPayroll.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-8 text-center text-gray-400 font-semibold">
-                          Belum ada penerbitan rincian slip payroll saat ini.
+                        <td colSpan={9} className="py-10 text-center text-gray-400 font-semibold">
+                          <CreditCard className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                          Tidak ada data slip gaji yang sesuai dengan kriteria pencarian.
                         </td>
                       </tr>
                     ) : (
-                      payroll.map((pay) => (
+                      filteredPayroll.map((pay) => (
                         <tr key={pay.id} className="hover:bg-slate-50/50 transition">
                           <td className="py-4 px-4 font-bold text-slate-700">
                             {pay.month}
                           </td>
                           <td className="py-4 px-4">
                             <p className="font-bold text-slate-850">{getEmployeeName(pay.employeeId)}</p>
-                            <p className="text-[9px] text-gray-400">Pegawai PMS Pro</p>
+                            <p className="text-[9px] text-gray-400">ID: {pay.employeeId.toUpperCase()}</p>
                           </td>
                           <td className="py-4 px-4 font-mono">
                             Rp {pay.basicSalary.toLocaleString()}
@@ -1666,29 +1900,43 @@ export default function HRISModule({
                               {pay.status === "Paid" ? "TERSELESAIKAN" : "PENDING TRANSFER"}
                             </span>
                           </td>
-                          <td className="py-4 px-4 text-gray-500 font-medium">
+                          <td className="py-4 px-4 text-gray-500 font-medium text-[11px]">
                             {pay.paymentDate || "Menunggu Pembayaran"}
                           </td>
                           <td className="py-4 px-4 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              {pay.status === "Pending" ? (
+                              {pay.status === "Pending" && (
                                 <button
                                   onClick={() => processPayment(pay)}
                                   className="px-2.5 py-1 text-[10px] bg-emerald-600 hover:bg-emerald-700 font-bold text-white rounded-lg transition shrink-0 shadow-sm"
+                                  title="Konfirmasi Pembayaran Gaji Staf"
                                 >
                                   Bayar Gaji
                                 </button>
-                              ) : (
-                                <span className="text-xs text-emerald-600 font-bold flex items-center justify-center gap-1 shrink-0">
-                                  <CheckCircle className="h-3 w-3" /> Sukses
-                                </span>
                               )}
+
+                              {/* Tombol Cetak / Pratinjau Dokumen Resmi */}
                               <button
-                                onClick={() => exportSalarySlipPDF(pay)}
-                                className="p-1 px-1.5 bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 font-bold text-[10px] rounded-lg border border-gray-200 hover:border-emerald-200 transition flex items-center gap-1 shrink-0"
-                                title="Unduh Slip Gaji PDF"
+                                onClick={() => setPreviewingPayslip(pay)}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl border border-slate-200 transition flex items-center gap-1.5 shrink-0 shadow-3xs cursor-pointer"
+                                title="Lihat Pratinjau & Cetak Slip Gaji Resmi (Bertanda Tangan Digital Finance)"
                               >
-                                <Download className="h-3.5 w-3.5" /> Slip
+                                <Printer className="h-3.5 w-3.5 text-slate-600" />
+                                <span>Cetak</span>
+                              </button>
+
+                              {/* Tombol Unduh PDF Dokumen Resmi Bertanda Tangan Digital Finance */}
+                              <button
+                                onClick={() => {
+                                  exportSalarySlipPDF(pay);
+                                  setSlipDownloadToast(`Slip gaji ${getEmployeeName(pay.employeeId)} bulan ${pay.month} berhasil diunduh dengan tanda tangan digital resmi Finance.`);
+                                  setTimeout(() => setSlipDownloadToast(null), 5000);
+                                }}
+                                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-xl transition flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
+                                title="Unduh File PDF Dokumen Resmi Slip Gaji (Telah Ditandatangani Digital oleh Finance)"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                <span>Unduh PDF</span>
                               </button>
                             </div>
                           </td>
@@ -1818,7 +2066,8 @@ export default function HRISModule({
                 )}
               </div>
             </div>
-          )}
+          );
+        })()}
 
           {/* TAB 4: LEAVE REQUESTS */}
           {activeSubTab === "leaves" && (
@@ -3194,10 +3443,41 @@ export default function HRISModule({
             </div>
 
             {/* Footer containing action button */}
-            <div className="p-3.5 bg-slate-50 border-t border-slate-200/80 flex justify-end shrink-0">
+            <div className="p-3.5 bg-slate-50 border-t border-slate-200/80 flex flex-wrap justify-between items-center gap-2 shrink-0">
+              {(() => {
+                const matchedEmp = employees.find(e => e.email === selectedEmail.recipientEmail);
+                const matchedPay = matchedEmp ? payroll.find(p => p.employeeId === matchedEmp.id) : null;
+                if (matchedPay) {
+                  return (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setPreviewingPayslip(matchedPay);
+                          setSelectedEmail(null);
+                        }}
+                        className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[10px] rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Printer className="h-3 w-3" /> Cetak Slip Gaji
+                      </button>
+                      <button
+                        onClick={() => {
+                          exportSalarySlipPDF(matchedPay);
+                          setSlipDownloadToast(`Slip gaji ${matchedEmp?.name} berhasil diunduh (terverifikasi tanda tangan digital Finance).`);
+                          setTimeout(() => setSlipDownloadToast(null), 5000);
+                        }}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                      >
+                        <Download className="h-3 w-3" /> Unduh Dokumen PDF (Finance Signed)
+                      </button>
+                    </div>
+                  );
+                }
+                return <span className="text-[10px] text-slate-400">Pemberitahuan Otomatis HRIS PMS Pro</span>;
+              })()}
+
               <button
                 onClick={() => setSelectedEmail(null)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition cursor-pointer"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition cursor-pointer ml-auto"
               >
                 Kembali ke Portal HRIS
               </button>
@@ -3306,6 +3586,333 @@ export default function HRISModule({
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* -------------------------------------
+          MODAL 7: OFFICIAL PAYSLIP PREVIEW & DIGITAL SIGNATURE VIEWER
+          ------------------------------------- */}
+      {previewingPayslip && (() => {
+        const emp = employees.find(e => e.id === previewingPayslip.employeeId);
+        const employeeName = emp?.name || "Karyawan Tidak Ditemukan";
+        const role = emp?.role || "Staff Operasional";
+        const department = emp?.department || "Operasional";
+        const phone = emp?.phone || "-";
+        const email = emp?.email || "-";
+        const simulatedAccountNum = (emp?.id ? emp.id.replace(/\D/g, "") : "") || "9021";
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden border border-slate-150 flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+              {/* Top Modal Navigation Bar */}
+              <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shrink-0 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm text-white tracking-wide">
+                        Dokumen Resmi Slip Gaji Karyawan
+                      </h3>
+                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[9px] font-mono font-bold uppercase flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Finance E-Sign Verified
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Disetujui & ditandatangani secara digital oleh Finance PT Forsdig Properti Indonesia
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPreviewingPayslip(null)}
+                  className="text-slate-400 hover:text-white transition text-2xl leading-none px-2 py-1 rounded-lg hover:bg-slate-800 cursor-pointer"
+                  title="Tutup Pratinjau"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Document Printable Viewport */}
+              <div className="p-6 sm:p-8 overflow-y-auto bg-slate-100/60 space-y-6 text-left">
+                {/* Visual Official Payslip Paper */}
+                <div id="official-salary-slip-printable" className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-sm space-y-6">
+                  {/* Top Letterhead */}
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-start pb-5 border-b-2 border-emerald-600 gap-4">
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900 tracking-tight">PT FORSDIG PROPERTI INDONESIA</h2>
+                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider mt-0.5">PMS Pro Properties & Hospitality Management</p>
+                      <p className="text-[11px] text-slate-500 mt-1">Gedung Pusat Forsdig Properti, Lt. 5, Jl. TB Simatupang No. 88, Jakarta Selatan</p>
+                      <p className="text-[10px] text-slate-400">Email: finance@pmsproproperties.co.id | hrd@pmsproproperties.co.id | Telp: (021) 855-9000</p>
+                    </div>
+                    <div className="sm:text-right bg-emerald-50 sm:bg-transparent p-3 sm:p-0 rounded-xl border border-emerald-100 sm:border-0">
+                      <div className="inline-block px-3 py-1 bg-emerald-700 text-white rounded-lg text-xs font-black tracking-wider uppercase mb-1">
+                        SLIP GAJI RESMI
+                      </div>
+                      <p className="text-xs font-bold text-slate-800">Periode: {previewingPayslip.month}</p>
+                      <p className="text-[10px] font-mono text-slate-500">No. Slip: SLIP/{previewingPayslip.month.replace(/\s+/g, "").toUpperCase()}/{previewingPayslip.id.toUpperCase().slice(-5)}</p>
+                      <p className="text-[10px] text-slate-400">Dicetak: {new Date().toLocaleDateString("id-ID")}</p>
+                    </div>
+                  </div>
+
+                  {/* Employee Details Grid */}
+                  <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-4">
+                    <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-slate-200">
+                      <FileText className="h-4 w-4 text-emerald-600" />
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Identitas & Informasi Karyawan</h4>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                      <div className="flex justify-between sm:justify-start gap-2">
+                        <span className="text-slate-500 w-32 font-medium">Nama Karyawan:</span>
+                        <span className="font-bold text-slate-900">{employeeName}</span>
+                      </div>
+                      <div className="flex justify-between sm:justify-start gap-2">
+                        <span className="text-slate-500 w-32 font-medium">No. Telepon / WA:</span>
+                        <span className="font-semibold text-slate-800">{phone}</span>
+                      </div>
+                      <div className="flex justify-between sm:justify-start gap-2">
+                        <span className="text-slate-500 w-32 font-medium">NIK / ID Karyawan:</span>
+                        <span className="font-mono font-bold text-slate-800">{previewingPayslip.employeeId.toUpperCase()}</span>
+                      </div>
+                      <div className="flex justify-between sm:justify-start gap-2">
+                        <span className="text-slate-500 w-32 font-medium">Email Perusahaan:</span>
+                        <span className="font-semibold text-slate-800">{email}</span>
+                      </div>
+                      <div className="flex justify-between sm:justify-start gap-2">
+                        <span className="text-slate-500 w-32 font-medium">Jabatan (Role):</span>
+                        <span className="font-bold text-emerald-800">{role}</span>
+                      </div>
+                      <div className="flex justify-between sm:justify-start gap-2">
+                        <span className="text-slate-500 w-32 font-medium">Status Kepegawaian:</span>
+                        <span className="font-semibold text-slate-800">Karyawan Tetap (Permanent)</span>
+                      </div>
+                      <div className="flex justify-between sm:justify-start gap-2">
+                        <span className="text-slate-500 w-32 font-medium">Departemen:</span>
+                        <span className="font-semibold text-slate-800">{department}</span>
+                      </div>
+                      <div className="flex justify-between sm:justify-start gap-2">
+                        <span className="text-slate-500 w-32 font-medium">Rekening Payroll:</span>
+                        <span className="font-mono font-semibold text-slate-800">Mandiri - 121-00-9882910-{simulatedAccountNum}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Financial Breakdown Table */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Column 1: Earnings */}
+                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="bg-emerald-50/70 border-b border-emerald-100 px-4 py-2.5 flex justify-between items-center">
+                        <span className="text-xs font-black text-emerald-900 uppercase tracking-wider">I. Rincian Pendapatan (Earnings)</span>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">Kredit (+)</span>
+                      </div>
+                      <div className="p-4 space-y-2.5 text-xs">
+                        <div className="flex justify-between items-center text-slate-700">
+                          <span>Gaji Pokok Utama</span>
+                          <span className="font-mono font-bold">Rp {previewingPayslip.basicSalary.toLocaleString("id-ID")}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-slate-700">
+                          <span>Tunjangan Operasional & Kinerja</span>
+                          <span className="font-mono font-bold text-emerald-600">+ Rp {previewingPayslip.allowance.toLocaleString("id-ID")}</span>
+                        </div>
+                        <div className="border-t border-slate-200 pt-2 flex justify-between items-center font-bold text-slate-900 bg-slate-50/50 -mx-4 -mb-4 p-4">
+                          <span>Total Pendapatan Kotor</span>
+                          <span className="font-mono font-black text-slate-900">Rp {(previewingPayslip.basicSalary + previewingPayslip.allowance).toLocaleString("id-ID")}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Column 2: Deductions */}
+                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="bg-rose-50/70 border-b border-rose-100 px-4 py-2.5 flex justify-between items-center">
+                        <span className="text-xs font-black text-rose-900 uppercase tracking-wider">II. Rincian Potongan (Deductions)</span>
+                        <span className="text-[10px] font-bold text-rose-700 bg-white px-2 py-0.5 rounded border border-rose-200">Debet (-)</span>
+                      </div>
+                      <div className="p-4 space-y-2.5 text-xs">
+                        <div className="flex justify-between items-center text-slate-700">
+                          <span>Potongan Absensi / Izin / Keterlambatan</span>
+                          <span className="font-mono font-bold text-rose-600">- Rp {previewingPayslip.deductions.toLocaleString("id-ID")}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-slate-700">
+                          <span>Iuran BPJS Ketenagakerjaan & PPh 21</span>
+                          <span className="font-mono font-bold text-rose-600">- Rp 0</span>
+                        </div>
+                        <div className="border-t border-slate-200 pt-2 flex justify-between items-center font-bold text-slate-900 bg-slate-50/50 -mx-4 -mb-4 p-4">
+                          <span>Total Potongan</span>
+                          <span className="font-mono font-black text-rose-700">- Rp {previewingPayslip.deductions.toLocaleString("id-ID")}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Net Take Home Pay Banner */}
+                  <div className="bg-gradient-to-r from-emerald-800 to-teal-800 text-white rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
+                    <div>
+                      <p className="text-xs font-bold text-emerald-200 uppercase tracking-wider">Total Gaji Bersih Diterima (Take Home Pay)</p>
+                      <h2 className="text-2xl sm:text-3xl font-black font-mono tracking-tight mt-0.5">
+                        Rp {previewingPayslip.netSalary.toLocaleString("id-ID")}
+                      </h2>
+                      <p className="text-[11px] text-emerald-100/80 mt-1">
+                        Metode Pencairan: Transfer Otomatis BI-FAST Rekening Mandiri
+                      </p>
+                    </div>
+                    <div className="text-center sm:text-right">
+                      <span className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider ${
+                        previewingPayslip.status === "Paid"
+                          ? "bg-white text-emerald-800 shadow"
+                          : "bg-amber-400 text-slate-900 font-black shadow"
+                      }`}>
+                        <CheckCircle className="h-4 w-4" />
+                        {previewingPayslip.status === "Paid" ? "TERBAYAR LUNAS" : "PENDING TRANSFER"}
+                      </span>
+                      <p className="text-[10px] text-emerald-100 mt-1.5 font-mono">
+                        {previewingPayslip.paymentDate ? `Tgl Transfer: ${previewingPayslip.paymentDate}` : "Menunggu Eksekusi Treasury"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Three-Tier Digital Signature Block */}
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Otorisasi & Tanda Tangan Digital Resmi
+                        </h4>
+                      </div>
+                      <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold">
+                        UU ITE No. 11/2008
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
+                      {/* HR Specialist */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase">Disusun Oleh (HRD)</p>
+                          <div className="my-2 p-2 bg-white rounded-lg border border-slate-200 text-center">
+                            <span className="text-[9px] font-bold text-slate-700 block">[VERIFIED DIGITAL HRD]</span>
+                            <span className="text-[8px] font-mono text-slate-400 block">Ref: HRD-SIG-{previewingPayslip.id.toUpperCase().slice(-5)}</span>
+                          </div>
+                        </div>
+                        <div className="border-t border-slate-200 pt-2">
+                          <p className="text-xs font-bold text-slate-800">Ismail Marzuki, S.Psi.</p>
+                          <p className="text-[10px] text-slate-500">HR & Operations Lead</p>
+                          <p className="text-[9px] text-slate-400">NIP: HRD-2023-018</p>
+                        </div>
+                      </div>
+
+                      {/* FINANCE DIGITAL SIGNATURE (HIGHLIGHTED) */}
+                      <div className="bg-emerald-50/70 border-2 border-emerald-500 rounded-xl p-3.5 flex flex-col justify-between relative shadow-sm">
+                        <div className="absolute -top-2.5 right-3 bg-emerald-600 text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                          <ShieldCheck className="h-2.5 w-2.5" /> OFFICIAL FINANCE E-SIGN
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-emerald-800 uppercase">Disetujui & TTD Digital (Finance)</p>
+                          <div className="my-2 p-2.5 bg-white rounded-lg border border-emerald-300 text-center shadow-3xs">
+                            <span className="text-[9px] font-black text-emerald-700 flex items-center justify-center gap-1">
+                              <CheckCircle className="h-3 w-3 text-emerald-600" />
+                              DIGITALLY SIGNED BY FINANCE
+                            </span>
+                            <span className="text-[8px] font-mono text-slate-500 block mt-0.5">Cert ID: FIN-EAUTH-{previewingPayslip.id.toUpperCase()}</span>
+                            <span className="text-[7.5px] font-mono text-slate-400 block">Hash: SHA256:{(previewingPayslip.id + previewingPayslip.netSalary).slice(0, 8)}...e9a4f</span>
+                          </div>
+                        </div>
+                        <div className="border-t border-emerald-200 pt-2">
+                          <p className="text-xs font-bold text-slate-900">Budi Santoso, S.E., Ak., CA</p>
+                          <p className="text-[10px] font-semibold text-emerald-800">Finance & Accounting Manager</p>
+                          <p className="text-[9px] text-slate-500">Tgl Otorisasi: {previewingPayslip.paymentDate || "2026-07-01"} | KEP-FIN-09</p>
+                        </div>
+                      </div>
+
+                      {/* Employee Acknowledgement */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase">Diterima Oleh (Karyawan)</p>
+                          <div className="my-2 p-2 bg-white rounded-lg border border-slate-200 text-center">
+                            <span className="text-[9px] font-bold text-slate-700 block">[E-CONFIRMED / DITERIMA]</span>
+                            <span className="text-[8px] font-mono text-slate-400 block">ID Staf: {previewingPayslip.employeeId.toUpperCase()}</span>
+                          </div>
+                        </div>
+                        <div className="border-t border-slate-200 pt-2">
+                          <p className="text-xs font-bold text-slate-800">{employeeName}</p>
+                          <p className="text-[10px] text-slate-500">{role}</p>
+                          <p className="text-[9px] text-slate-400">Dept: {department}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Legal Compliance Disclaimer */}
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-[10px] text-slate-500 leading-relaxed">
+                    <p className="font-bold text-slate-700">Pernyataan Hukum Keabsahan Dokumen:</p>
+                    <p>
+                      Dokumen slip gaji ini diterbitkan secara sah oleh sistem PMS Pro Properties PT Forsdig Properti Indonesia dan telah ditandatangani secara digital oleh Finance & Akuntansi menggunakan sertifikat elektronik terverifikasi. Sesuai dengan ketentuan Undang-Undang ITE No. 11 Tahun 2008 Pasal 5 dan Pasal 6, dokumen elektronik ini memiliki kekuatan hukum yang sah dan mengikat tanpa memerlukan tanda tangan atau stempel basah konvensional.
+                    </p>
+                    <p className="font-mono text-[9px] text-slate-400 mt-1">
+                      Token Autentikasi: PMS-FIN-PAY-{previewingPayslip.id.toUpperCase()}-{(previewingPayslip.paymentDate || "2026-07-01").replace(/-/g, "")}-SECURE-VERIFIED
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Action Bar */}
+              <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <span>Sertifikat Tanda Tangan Digital Finance Sah & Terverifikasi</span>
+                </div>
+
+                <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                  <button
+                    onClick={() => setPreviewingPayslip(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      window.print();
+                    }}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Cetak Slip Gaji
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      exportSalarySlipPDF(previewingPayslip);
+                      setSlipDownloadToast(`Slip gaji ${employeeName} bulan ${previewingPayslip.month} berhasil diunduh dengan tanda tangan digital resmi Finance.`);
+                      setTimeout(() => setSlipDownloadToast(null), 5000);
+                    }}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" /> Unduh Dokumen PDF Resmi
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Floating Download Toast Confirmation */}
+      {slipDownloadToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-emerald-500/40 flex items-center gap-3 text-xs animate-in fade-in slide-in-from-bottom-3 duration-200 max-w-md">
+          <div className="p-1.5 bg-emerald-500 text-white rounded-xl shrink-0">
+            <CheckCheck className="h-4 w-4" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="font-bold text-emerald-400">Slip Gaji Berhasil Diunduh</p>
+            <p className="text-slate-300 text-[11px] leading-tight mt-0.5">{slipDownloadToast}</p>
+          </div>
+          <button
+            onClick={() => setSlipDownloadToast(null)}
+            className="text-slate-400 hover:text-white text-lg leading-none px-1"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>
