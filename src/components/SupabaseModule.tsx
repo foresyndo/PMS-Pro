@@ -16,7 +16,8 @@ import {
 import {
   isSupabaseConfigured,
   getSupabaseInitSQL,
-  getWorkChatsMigrationSQL
+  getWorkChatsMigrationSQL,
+  getTenantsMigrationSQL
 } from "../lib/supabase";
 
 interface SupabaseModuleProps {
@@ -38,10 +39,16 @@ export default function SupabaseModule({
   const [helpOpen, setHelpOpen] = useState(false);
 
   const isConfigured = isSupabaseConfigured();
-  const [selectedSqlTab, setSelectedSqlTab] = useState<"full" | "work_chats">("work_chats");
+  const [selectedSqlTab, setSelectedSqlTab] = useState<"full" | "work_chats" | "tenants">("tenants");
   const fullSqlCode = getSupabaseInitSQL();
   const workChatsSqlCode = getWorkChatsMigrationSQL();
-  const activeSqlCode = selectedSqlTab === "work_chats" ? workChatsSqlCode : fullSqlCode;
+  const tenantsSqlCode = getTenantsMigrationSQL();
+  const activeSqlCode =
+    selectedSqlTab === "tenants"
+      ? tenantsSqlCode
+      : selectedSqlTab === "work_chats"
+      ? workChatsSqlCode
+      : fullSqlCode;
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(activeSqlCode);
@@ -248,6 +255,16 @@ export default function SupabaseModule({
               </div>
               <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[11px] font-semibold">
                 <button
+                  onClick={() => setSelectedSqlTab("tenants")}
+                  className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                    selectedSqlTab === "tenants"
+                      ? "bg-white text-emerald-700 shadow-xs font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  ⚡ Tabel Tenants
+                </button>
+                <button
                   onClick={() => setSelectedSqlTab("work_chats")}
                   className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
                     selectedSqlTab === "work_chats"
@@ -255,7 +272,7 @@ export default function SupabaseModule({
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  ⚡ Migration work_chats
+                  work_chats
                 </button>
                 <button
                   onClick={() => setSelectedSqlTab("full")}
@@ -271,7 +288,11 @@ export default function SupabaseModule({
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed">
-              {selectedSqlTab === "work_chats" ? (
+              {selectedSqlTab === "tenants" ? (
+                <span>
+                  Skrip DDL & migrasi untuk tabel <strong>public.tenants</strong> (Master Data Penyewa): KTP, nomor HP, email, kontak darurat (JSONB), indeks pencarian, trigger timestamp, RLS, serta seeding awal.
+                </span>
+              ) : selectedSqlTab === "work_chats" ? (
                 <span>
                   Skrip migrasi khusus untuk tabel <strong>public.work_chats</strong> dengan kolom UUID, timestamp, foreign key, RLS policies aman, serta publikasi realtime.
                 </span>

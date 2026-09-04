@@ -316,6 +316,51 @@ export const INITIAL_TENANTS: Tenant[] = [
       phone: "085211002277"
     },
     createdAt: "2024-05-01T15:10:00Z"
+  },
+  {
+    id: "t-4",
+    name: "Putri Ramadhani",
+    ktpNumber: "3172054901980002",
+    phone: "081388771122",
+    email: "putri.ramadhani@techasia.com",
+    address: "Tebet Barat Dalam VII No. 14, Jakarta Selatan",
+    jobTitle: "Product Designer di Tech In Asia",
+    emergencyContact: {
+      name: "Drs. M. Ridwan",
+      relation: "Ayah Kandung",
+      phone: "081211335577"
+    },
+    createdAt: "2025-08-10T09:00:00Z"
+  },
+  {
+    id: "t-5",
+    name: "Hendra Gunawan",
+    ktpNumber: "3578011204890005",
+    phone: "082144556677",
+    email: "hendra.gunawan@fintech.id",
+    address: "Kertajaya Indah Timur Blok B-12, Surabaya",
+    jobTitle: "VP of Engineering",
+    emergencyContact: {
+      name: "Ratna Gunawan",
+      relation: "Istri",
+      phone: "082144556688"
+    },
+    createdAt: "2025-11-20T14:20:00Z"
+  },
+  {
+    id: "t-6",
+    name: "Alisha Zahra",
+    ktpNumber: "3271045508010007",
+    phone: "087799001144",
+    email: "alisha.zahra@creative.co",
+    address: "Pajajaran Regency Kav. 5, Bogor",
+    jobTitle: "Senior Brand Consultant",
+    emergencyContact: {
+      name: "Zainal Arifin",
+      relation: "Paman",
+      phone: "087799001155"
+    },
+    createdAt: "2026-02-05T10:00:00Z"
   }
 ];
 
@@ -349,14 +394,14 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
   {
     id: "res-103",
     tenantId: "t-3",
-    propertyId: "prop-1", // Hotel (harian dimodelkan reservasi panjang/aktif)
+    propertyId: "prop-1", // Hotel
     unitId: "unit-101",
     checkInDate: "2026-06-18",
     checkOutDate: "2026-06-25",
     deposit: 500000,
     totalPrice: 4550000,
     paymentStatus: "Paid",
-    status: "Checked In",
+    status: "Checked Out",
     createdAt: "2026-06-15T09:12:00Z"
   },
   {
@@ -368,9 +413,101 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
     checkOutDate: "2027-01-01",
     deposit: 1000000,
     totalPrice: 16800000,
+    paymentStatus: "Paid",
+    status: "Checked In",
+    createdAt: "2026-06-19T14:45:00Z"
+  },
+  // Reservasi Terbaru & Berjalan Bulan September 2026
+  {
+    id: "res-105",
+    tenantId: "t-4",
+    propertyId: "prop-1", // Grand Forsdig Hotel
+    unitId: "unit-101",
+    checkInDate: "2026-09-02",
+    checkOutDate: "2026-09-06",
+    deposit: 500000,
+    totalPrice: 2600000,
+    paymentStatus: "Paid",
+    status: "Checked In",
+    createdAt: "2026-08-28T10:30:00Z"
+  },
+  {
+    id: "res-106",
+    tenantId: "t-5",
+    propertyId: "prop-1", // Grand Forsdig Hotel
+    unitId: "unit-201",
+    checkInDate: "2026-09-04",
+    checkOutDate: "2026-09-08",
+    deposit: 1000000,
+    totalPrice: 4800000,
+    paymentStatus: "Paid",
+    status: "Checked In",
+    createdAt: "2026-09-01T15:00:00Z"
+  },
+  {
+    id: "res-107",
+    tenantId: "t-6",
+    propertyId: "prop-1", // Grand Forsdig Hotel
+    unitId: "unit-202",
+    checkInDate: "2026-09-08",
+    checkOutDate: "2026-09-12",
+    deposit: 1000000,
+    totalPrice: 4800000,
     paymentStatus: "Unpaid",
     status: "Confirmed",
-    createdAt: "2026-06-19T14:45:00Z"
+    createdAt: "2026-09-03T11:20:00Z"
+  },
+  {
+    id: "res-108",
+    tenantId: "t-3",
+    propertyId: "prop-4", // Villa Serene Sunset
+    unitId: "unit-villa01",
+    checkInDate: "2026-09-01",
+    checkOutDate: "2026-09-07",
+    deposit: 2000000,
+    totalPrice: 27000000,
+    paymentStatus: "Paid",
+    status: "Checked In",
+    createdAt: "2026-08-25T08:15:00Z"
+  },
+  {
+    id: "res-109",
+    tenantId: "t-4",
+    propertyId: "prop-2", // Forsdig Kost Singgah Sini
+    unitId: "unit-k3",
+    checkInDate: "2026-09-03",
+    checkOutDate: "2026-09-24",
+    deposit: 1000000,
+    totalPrice: 5600000,
+    paymentStatus: "Paid",
+    status: "Checked In",
+    createdAt: "2026-09-02T16:00:00Z"
+  },
+  {
+    id: "res-110",
+    tenantId: "t-5",
+    propertyId: "prop-3", // Apartemen Senopati Luxury
+    unitId: "unit-apt15b",
+    checkInDate: "2026-09-11",
+    checkOutDate: "2026-09-25",
+    deposit: 5000000,
+    totalPrice: 15400000,
+    paymentStatus: "Unpaid",
+    status: "Pending",
+    createdAt: "2026-09-04T08:30:00Z"
+  },
+  {
+    id: "res-111",
+    tenantId: "t-6",
+    propertyId: "prop-1", // Grand Forsdig Hotel
+    unitId: "unit-101",
+    checkInDate: "2026-09-15",
+    checkOutDate: "2026-09-19",
+    deposit: 500000,
+    totalPrice: 2600000,
+    paymentStatus: "Unpaid",
+    status: "Confirmed",
+    createdAt: "2026-09-04T09:10:00Z"
   }
 ];
 

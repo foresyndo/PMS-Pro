@@ -83,14 +83,14 @@ export default function Dashboard({
   };
 
   // Recharts Data Mapping
-  // Monthly Cashflow data template
+  // Monthly Cashflow data template (6 bulan terakhir s/d September 2026 terbaru)
   const cashflowData = [
-    { name: "Jan", Pendapatan: totalRevenue * 0.7, Pengeluaran: totalExpense * 0.8 },
-    { name: "Feb", Pendapatan: totalRevenue * 0.85, Pengeluaran: totalExpense * 0.9 },
-    { name: "Mar", Pendapatan: totalRevenue * 0.82, Pengeluaran: totalExpense * 0.75 },
-    { name: "Apr", Pendapatan: totalRevenue * 0.9, Pengeluaran: totalExpense * 0.85 },
-    { name: "Mei", Pendapatan: totalRevenue * 0.95, Pengeluaran: totalExpense * 0.9 },
-    { name: "Jun (Aktif)", Pendapatan: totalRevenue, Pengeluaran: totalExpense }
+    { name: "Apr", Pendapatan: totalRevenue * 0.75, Pengeluaran: totalExpense * 0.8 },
+    { name: "Mei", Pendapatan: totalRevenue * 0.82, Pengeluaran: totalExpense * 0.85 },
+    { name: "Jun", Pendapatan: totalRevenue * 0.88, Pengeluaran: totalExpense * 0.8 },
+    { name: "Jul", Pendapatan: totalRevenue * 0.92, Pengeluaran: totalExpense * 0.75 },
+    { name: "Agt", Pendapatan: totalRevenue * 0.96, Pengeluaran: totalExpense * 0.9 },
+    { name: "Sep (Aktif)", Pendapatan: totalRevenue, Pengeluaran: totalExpense }
   ];
 
   const pieData = [

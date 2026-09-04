@@ -76,11 +76,18 @@ CREATE TABLE IF NOT EXISTS tenants (
   ktp_number TEXT,
   ktp_url TEXT,
   phone TEXT,
+  email TEXT,
   address TEXT,
   job_title TEXT,
-  emergency_contact JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+  emergency_contact JSONB DEFAULT '{"name":"","relation":"","phone":""}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
+
+CREATE INDEX IF NOT EXISTS idx_tenants_name ON tenants (name);
+CREATE INDEX IF NOT EXISTS idx_tenants_phone ON tenants (phone);
+CREATE INDEX IF NOT EXISTS idx_tenants_email ON tenants (email);
+CREATE INDEX IF NOT EXISTS idx_tenants_ktp ON tenants (ktp_number);
 
 -- 4. Tabel Reservations
 CREATE TABLE IF NOT EXISTS reservations (
@@ -380,6 +387,120 @@ EXCEPTION
     NULL;
 END;
 $$;
+`;
+};
+
+// Dedicated SQL Migration for public.tenants
+export const getTenantsMigrationSQL = () => {
+  return `-- ==========================================================
+-- MIGRATION: public.tenants (Master Data Penyewa / Tamu PMS)
+-- Deskripsi: Membuat tabel public.tenants dengan primary key,
+-- kolom KTP, kontak darurat JSONB, indeks pencarian cepat,
+-- auto updated_at trigger, RLS policies, dan publikasi realtime.
+-- ==========================================================
+
+-- 1. Buat tabel public.tenants
+CREATE TABLE IF NOT EXISTS public.tenants (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  ktp_number TEXT,
+  ktp_url TEXT,
+  phone TEXT NOT NULL,
+  email TEXT,
+  address TEXT,
+  job_title TEXT,
+  emergency_contact JSONB DEFAULT '{"name":"","relation":"","phone":""}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 2. Indeks untuk optimasi query pencarian & filter data tenant
+CREATE INDEX IF NOT EXISTS idx_tenants_name ON public.tenants (name);
+CREATE INDEX IF NOT EXISTS idx_tenants_phone ON public.tenants (phone);
+CREATE INDEX IF NOT EXISTS idx_tenants_email ON public.tenants (email);
+CREATE INDEX IF NOT EXISTS idx_tenants_ktp ON public.tenants (ktp_number);
+CREATE INDEX IF NOT EXISTS idx_tenants_created_at ON public.tenants (created_at DESC);
+
+-- 3. Trigger otomatis pembaruan kolom updated_at saat data diedit
+CREATE OR REPLACE FUNCTION public.set_tenants_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = timezone('utc'::text, now());
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_tenants_updated_at ON public.tenants;
+CREATE TRIGGER trg_tenants_updated_at
+  BEFORE UPDATE ON public.tenants
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_tenants_updated_at();
+
+-- 4. Aktifkan Row Level Security (RLS)
+ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
+
+-- 5. Kebijakan RLS (Row Level Security)
+-- Memungkinkan aplikasi membaca data seluruh tenant aktif
+DROP POLICY IF EXISTS "Allow read tenants" ON public.tenants;
+CREATE POLICY "Allow read tenants"
+  ON public.tenants
+  FOR SELECT
+  TO authenticated, anon
+  USING (true);
+
+-- Memungkinkan penambahan tenant baru dari form registrasi/kontrak
+DROP POLICY IF EXISTS "Allow insert tenants" ON public.tenants;
+CREATE POLICY "Allow insert tenants"
+  ON public.tenants
+  FOR INSERT
+  TO authenticated, anon
+  WITH CHECK (true);
+
+-- Memungkinkan pembaruan data profil tenant
+DROP POLICY IF EXISTS "Allow update tenants" ON public.tenants;
+CREATE POLICY "Allow update tenants"
+  ON public.tenants
+  FOR UPDATE
+  TO authenticated, anon
+  USING (true)
+  WITH CHECK (true);
+
+-- Memungkinkan penghapusan tenant oleh admin/manajemen
+DROP POLICY IF EXISTS "Allow delete tenants" ON public.tenants;
+CREATE POLICY "Allow delete tenants"
+  ON public.tenants
+  FOR DELETE
+  TO authenticated, anon
+  USING (true);
+
+-- 6. Tambahkan ke publikasi Supabase Realtime
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'tenants'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.tenants;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END;
+$$;
+
+-- 7. Data Awal / Contoh Seeding Data Penyewa
+INSERT INTO public.tenants (id, name, ktp_number, phone, email, address, job_title, emergency_contact, created_at)
+VALUES 
+  ('t-1', 'Rian Aditya', '32731102940001', '083811223344', 'rian.aditya@gmail.com', 'Jl. Margahayu Blok G No. 9, Bandung', 'Software Engineer di GoTo', '{"name":"Setyo Aditya","relation":"Orang Tua (Ayah)","phone":"081299887766"}'::jsonb, now()),
+  ('t-2', 'Jessica Lauren', '3174092205960004', '081288997766', 'jessica.lauren@mandiri.co.id', 'Kencana Loka Sektor VII, BSD City, Tangerang', 'Investment Analyst di Mandiri Sekuritas', '{"name":"Marcus Lauren","relation":"Kakak Kandung","phone":"081122445566"}'::jsonb, now()),
+  ('t-3', 'Danu Broto', '33211504910003', '085211002299', 'danu.broto@consulting.com', 'Sleman Permai II, Ngaglik, Sleman, Yogyakarta', 'Business Consultant', '{"name":"Indah Broto","relation":"Istri","phone":"085211002277"}'::jsonb, now())
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  phone = EXCLUDED.phone,
+  email = EXCLUDED.email,
+  job_title = EXCLUDED.job_title;
 `;
 };
 
