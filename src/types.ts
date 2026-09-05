@@ -148,7 +148,7 @@ export interface Invoice {
   createdAt: string;
 }
 
-export type PaymentMethod = "Transfer" | "Cash" | "QRIS" | "Payment Gateway";
+export type PaymentMethod = "Transfer" | "Cash" | "QRIS" | "Payment Gateway" | "EDC" | "Credit Card";
 
 export interface PaymentLog {
   id: string;
@@ -297,5 +297,115 @@ export interface ShiftSchedule {
   shift: ShiftType;
   updatedAt?: string;
 }
+
+// ================= FINANCIAL & ACCOUNTING REPORT TYPES =================
+export type AccountCategory = 
+  | "Aset Lancar" 
+  | "Aset Tetap" 
+  | "Liabilitas Jangka Pendek" 
+  | "Liabilitas Jangka Panjang" 
+  | "Ekuitas" 
+  | "Pendapatan" 
+  | "HPP" 
+  | "Beban Operasional" 
+  | "Beban Lainnya";
+
+export interface ChartOfAccount {
+  code: string;
+  name: string;
+  category: AccountCategory;
+  normalBalance: "Debit" | "Kredit";
+  initialBalance: number;
+  currentBalance: number;
+  description?: string;
+}
+
+export interface JournalEntryLine {
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+}
+
+export interface JournalEntry {
+  id: string;
+  journalNumber: string;
+  date: string;
+  description: string;
+  referenceType: "Invoice" | "Payment" | "Expense" | "Payroll" | "Manual" | "Transfer" | "Adjustment";
+  referenceId?: string;
+  lines: JournalEntryLine[];
+  createdBy: string;
+}
+
+export interface VendorPayable {
+  id: string;
+  vendorName: string;
+  invoiceNumber: string;
+  category: string;
+  amount: number;
+  paidAmount: number;
+  invoiceDate: string;
+  dueDate: string;
+  status: "Unpaid" | "Partial" | "Paid" | "Overdue";
+  notes?: string;
+  paymentHistory?: {
+    date: string;
+    amount: number;
+    method: string;
+    refNumber: string;
+  }[];
+}
+
+export interface BankAccount {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  currentBalance: number;
+  reconciledBalance: number;
+  lastReconciledAt?: string;
+  type: "Bank" | "Kas";
+}
+
+export interface BankMutation {
+  id: string;
+  accountId: string;
+  date: string;
+  description: string;
+  type: "In" | "Out";
+  amount: number;
+  balanceAfter: number;
+  reconciled: boolean;
+  reference?: string;
+}
+
+export interface FinancialBudget {
+  id: string;
+  category: string;
+  department: string;
+  period: string; // e.g., "2026-09"
+  budgetedAmount: number;
+}
+
+export interface FinancialClosingPeriod {
+  periodKey: string;
+  type: "Monthly" | "Annual";
+  isLocked: boolean;
+  closedAt?: string;
+  closedBy?: string;
+  netIncomeCalculated: number;
+  notes?: string;
+}
+
+export interface FinancialAuditLog {
+  id: string;
+  timestamp: string;
+  user: string;
+  role: string;
+  action: string;
+  details: string;
+}
+
 
 

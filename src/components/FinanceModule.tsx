@@ -97,7 +97,7 @@ export default function FinanceModule({
     ? reservations
     : ((bookings && bookings.length > 0) ? bookings : INITIAL_RESERVATIONS);
 
-  const [activeTab, setActiveTab] = useState<"invoices" | "expenses" | "reports" | "approvals">("invoices");
+  const [activeTab, setActiveTab] = useState<"invoices" | "expenses" | "reports" | "approvals" | "payments">("invoices");
   
   // WhatsApp Status Filter & Search States
   const [waStatusFilter, setWaStatusFilter] = useState<"ALL" | WhatsAppStatus>("ALL");
@@ -168,6 +168,10 @@ export default function FinanceModule({
   const [bookingInvoiceTaxPercent, setBookingInvoiceTaxPercent] = useState<number>(1);
   const [bookingInvoiceCustomNotes, setBookingInvoiceCustomNotes] = useState<string>("");
   const [isGeneratingBookingPdf, setIsGeneratingBookingPdf] = useState<boolean>(false);
+
+  // Payments Ledger Tab States
+  const [paymentSearch, setPaymentSearch] = useState<string>("");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("ALL");
 
   // Auto-sync reservation selection when tenant changes
   React.useEffect(() => {
@@ -1556,13 +1560,14 @@ export default function FinanceModule({
     if (!payingInvoice) return;
 
     // Log the transaction payment
-    const newPay: PaymentLog = {
+    const newPay: PaymentLog & { _invoice?: Invoice } = {
       id: "pay-" + Date.now().toString(),
       invoiceId: payingInvoice.id,
       amount: Number(paymentAmount),
       paymentDate: new Date().toISOString(),
       method: paymentMethod,
-      transactionNumber: paymentTx || `TX-manual-${Date.now().toString().slice(-4)}`
+      transactionNumber: paymentTx || `TX-manual-${Date.now().toString().slice(-4)}`,
+      _invoice: payingInvoice
     };
 
     onAddPayment(newPay);
@@ -1742,6 +1747,17 @@ export default function FinanceModule({
               {payroll.filter(p => p.status === "Pending").length}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => setActiveTab("payments")}
+          className={`pb-3 px-4 font-extrabold text-xs tracking-wider uppercase border-b-2 transition flex items-center gap-2 cursor-pointer ${
+            activeTab === "payments" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Penerimaan Kas &amp; Bayar</span>
+          <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-2 py-0.5 rounded-full">
+            {payments.length}
+          </span>
         </button>
       </div>
 
@@ -2187,10 +2203,17 @@ export default function FinanceModule({
                     return (
                       <tr key={inv.id} className={`hover:bg-slate-50/50 transition ${isH3 ? "bg-amber-50/30" : ""}`}>
                         <td className="p-4 whitespace-nowrap font-mono font-bold text-emerald-800">
-                          <div className="flex items-center gap-1.5">
-                            {inv.invoiceNumber}
-                            {isH3 && (
-                              <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" title="Target H-3 Pengingat Hari Ini" />
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              {inv.invoiceNumber}
+                              {isH3 && (
+                                <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" title="Target H-3 Pengingat Hari Ini" />
+                              )}
+                            </div>
+                            {inv.invoiceNumber.startsWith("INV/REC") && (
+                              <span className="w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-teal-100 text-teal-800 border border-teal-200">
+                                🏨 Kasir Resepsionis
+                              </span>
                             )}
                           </div>
                         </td>
@@ -2845,6 +2868,278 @@ export default function FinanceModule({
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENTS & CASH INFLOW SECTION */}
+      {activeTab === "payments" && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  Real-Time Cash Inflow
+                </span>
+                <span className="text-xs text-slate-400 font-mono">
+                  Total: {payments.length} Transaksi Terverifikasi
+                </span>
+              </div>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-emerald-600" />
+                Buku Kas Masuk &amp; Realisasi Pembayaran
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pencatatan kas masuk terintegrasi langsung dari Kasir Resepsionis (Tunai, QRIS, EDC) dan Transfer Pembayaran Sewa
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                Tersambung ke Kasir Resepsionis
+              </span>
+            </div>
+          </div>
+
+          {/* Metric KPIs */}
+          {(() => {
+            const totalCashInflow = payments.reduce((sum, p) => sum + p.amount, 0);
+            const receptionistPayments = payments.filter((p) => {
+              const inv = invoices.find((i) => i.id === p.invoiceId);
+              return inv?.invoiceNumber.startsWith("INV/REC") || p.transactionNumber.startsWith("REC-");
+            });
+            const receptionistAmount = receptionistPayments.reduce((sum, p) => sum + p.amount, 0);
+            const cashQrisAmount = payments
+              .filter((p) => p.method === "Cash" || p.method === "QRIS")
+              .reduce((sum, p) => sum + p.amount, 0);
+            const bankEdcAmount = payments
+              .filter((p) => p.method === "Transfer" || p.method === "EDC" || p.method === "Credit Card")
+              .reduce((sum, p) => sum + p.amount, 0);
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <span className="text-[11px] font-extrabold uppercase text-slate-400 block mb-1">
+                    Total Kas Masuk
+                  </span>
+                  <div className="text-2xl font-black text-emerald-700">
+                    {formatIDR(totalCashInflow)}
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Semua transaksi lunas &amp; tervalidasi
+                  </span>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-extrabold uppercase text-slate-400">
+                      Kasir Resepsionis
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
+                      {receptionistPayments.length} Transaksi
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-teal-700">
+                    {formatIDR(receptionistAmount)}
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Penerimaan dari front desk hotel/kos
+                  </span>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <span className="text-[11px] font-extrabold uppercase text-slate-400 block mb-1">
+                    Tunai &amp; QRIS (Front Desk)
+                  </span>
+                  <div className="text-2xl font-black text-slate-800">
+                    {formatIDR(cashQrisAmount)}
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Kas tunai di laci &amp; QRIS instan
+                  </span>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <span className="text-[11px] font-extrabold uppercase text-slate-400 block mb-1">
+                    Transfer Bank &amp; EDC
+                  </span>
+                  <div className="text-2xl font-black text-slate-800">
+                    {formatIDR(bankEdcAmount)}
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Masuk langsung rekening bank
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Filter & Search Bar */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div className="relative w-full md:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={paymentSearch}
+                onChange={(e) => setPaymentSearch(e.target.value)}
+                placeholder="Cari No. Transaksi, Faktur, Tamu..."
+                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
+              <span className="text-xs font-bold text-slate-500 mr-1 hidden sm:inline">Metode:</span>
+              {["ALL", "Cash", "QRIS", "Transfer", "EDC"].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setPaymentMethodFilter(m)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    paymentMethodFilter === m
+                      ? "bg-slate-800 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {m === "ALL" ? "Semua" : m === "Cash" ? "Tunai" : m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[750px]">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                    <th className="p-3.5">Waktu Transaksi</th>
+                    <th className="p-3.5">No. Transaksi</th>
+                    <th className="p-3.5">Faktur / Invoice</th>
+                    <th className="p-3.5">Nama Tamu &amp; Kamar</th>
+                    <th className="p-3.5">Asal Transaksi</th>
+                    <th className="p-3.5">Metode Bayar</th>
+                    <th className="p-3.5 text-right">Nominal Diterima</th>
+                    <th className="p-3.5 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                  {(() => {
+                    const filtered = payments.filter((pay) => {
+                      const inv = invoices.find((i) => i.id === pay.invoiceId);
+                      const ten = tenants.find((t) => t.id === inv?.tenantId);
+                      const q = paymentSearch.toLowerCase();
+                      const matchSearch =
+                        !q ||
+                        pay.transactionNumber.toLowerCase().includes(q) ||
+                        (inv?.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(q)) ||
+                        (ten?.name && ten.name.toLowerCase().includes(q));
+
+                      const matchMethod =
+                        paymentMethodFilter === "ALL" || pay.method === paymentMethodFilter;
+
+                      return matchSearch && matchMethod;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={8} className="text-center py-10 text-slate-400">
+                            Tidak ada data penerimaan kas yang cocok.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filtered.map((pay) => {
+                      const inv = invoices.find((i) => i.id === pay.invoiceId);
+                      const ten = tenants.find((t) => t.id === inv?.tenantId);
+                      const unt = units.find((u) => u.id === inv?.unitId);
+                      const isReception =
+                        inv?.invoiceNumber.startsWith("INV/REC") ||
+                        pay.transactionNumber.startsWith("REC-");
+
+                      return (
+                        <tr key={pay.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="p-3.5 whitespace-nowrap font-mono text-[11px] text-slate-600">
+                            {pay.paymentDate
+                              ? new Date(pay.paymentDate).toLocaleString("id-ID", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit"
+                                })
+                              : "-"}
+                          </td>
+                          <td className="p-3.5 font-mono font-bold text-slate-700">
+                            {pay.transactionNumber}
+                          </td>
+                          <td className="p-3.5">
+                            <span className="font-mono font-extrabold text-emerald-800 block">
+                              {inv?.invoiceNumber || "Tagihan Bebas"}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              ID: {pay.invoiceId}
+                            </span>
+                          </td>
+                          <td className="p-3.5">
+                            <span className="font-extrabold text-slate-800 block">
+                              {ten?.name || "Tamu/Penyewa"}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              Kamar {unt?.unitNumber || "-"}
+                            </span>
+                          </td>
+                          <td className="p-3.5">
+                            {isReception ? (
+                              <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-200 inline-flex items-center gap-1">
+                                🏨 Kasir Resepsionis
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200 inline-flex items-center gap-1">
+                                🏢 Back Office Keuangan
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3.5">
+                            <span
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                                pay.method === "Cash"
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  : pay.method === "QRIS"
+                                  ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                                  : pay.method === "EDC"
+                                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                                  : "bg-blue-50 text-blue-800 border-blue-200"
+                              }`}
+                            >
+                              {pay.method === "Cash" ? "💵 Tunai (Kas)" : pay.method}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right font-black text-emerald-700 font-mono text-sm whitespace-nowrap">
+                            {formatIDR(pay.amount)}
+                          </td>
+                          <td className="p-3.5 text-right">
+                            {inv ? (
+                              <button
+                                onClick={() => setPrintingInvoice(inv)}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-[10px] transition cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Printer className="w-3 h-3 text-slate-500" />
+                                <span>Cetak Kuitansi</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">Lunas</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

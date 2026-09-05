@@ -33,16 +33,27 @@ import {
   Property,
   ReservationStatus,
   PaymentStatus,
-  UnitStatus
+  UnitStatus,
+  Invoice,
+  PaymentLog
 } from "../types";
+import ReceptionBillingPayment from "./ReceptionBillingPayment";
+import { Receipt, FileText } from "lucide-react";
 
 interface BookingModuleProps {
   reservations: Reservation[];
   tenants: Tenant[];
   units: Unit[];
   properties: Property[];
+  invoices?: Invoice[];
+  payments?: PaymentLog[];
   onAddReservation: (res: Reservation) => void;
   onUpdateReservation: (res: Reservation) => void;
+  onAddInvoice?: (inv: Invoice) => void;
+  onUpdateInvoice?: (inv: Invoice) => void;
+  onAddPayment?: (pay: PaymentLog) => void;
+  onUpdateInvoiceStatus?: (id: string, status: PaymentStatus) => void;
+  onNavigateToFinance?: () => void;
 }
 
 const MONTH_NAMES_ID = [
@@ -67,9 +78,20 @@ export default function BookingModule({
   tenants,
   units,
   properties,
+  invoices = [],
+  payments = [],
   onAddReservation,
-  onUpdateReservation
+  onUpdateReservation,
+  onAddInvoice = () => {},
+  onUpdateInvoice,
+  onAddPayment = () => {},
+  onUpdateInvoiceStatus,
+  onNavigateToFinance
 }: BookingModuleProps) {
+  // Active sub-tab inside Front Desk & Booking: planner, billing, logs
+  const [activeSubTab, setActiveSubTab] = useState<"planner" | "billing" | "logs">("planner");
+  const [billingPreselectedResId, setBillingPreselectedResId] = useState<string | null>(null);
+
   // Current real-world date context (defaults to current date: September 4, 2026)
   const todayObj = useMemo(() => new Date(), []);
   const todayYear = todayObj.getFullYear();
@@ -422,6 +444,81 @@ export default function BookingModule({
         </div>
       </div>
 
+      {/* SUB-TAB NAVIGATOR: PLANNER, BILLING & CASHIER, LOGS */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <button
+            onClick={() => setActiveSubTab("planner")}
+            className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition flex items-center gap-2 cursor-pointer ${
+              activeSubTab === "planner"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <CalendarDays className="w-4 h-4" />
+            <span>Room Planner & Okupansi</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab("billing")}
+            className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition flex items-center gap-2 cursor-pointer ${
+              activeSubTab === "billing"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <Receipt className="w-4 h-4 text-emerald-300" />
+            <span>Kasir & Billing Resepsionis</span>
+            <span className="px-2 py-0.5 rounded-full text-[9px] bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200 animate-pulse">
+              Live Finance Sync
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab("logs")}
+            className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition flex items-center gap-2 cursor-pointer ${
+              activeSubTab === "logs"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Log Reservasi ({reservations.length})</span>
+          </button>
+        </div>
+
+        {activeSubTab === "billing" && onNavigateToFinance && (
+          <button
+            onClick={onNavigateToFinance}
+            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200 cursor-pointer"
+          >
+            <span>Buka Modul Keuangan</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {activeSubTab === "billing" && (
+        <ReceptionBillingPayment
+          reservations={reservations}
+          tenants={tenants}
+          units={units}
+          properties={properties}
+          invoices={invoices}
+          payments={payments}
+          onAddInvoice={onAddInvoice}
+          onUpdateInvoice={onUpdateInvoice}
+          onAddPayment={onAddPayment}
+          onUpdateReservation={onUpdateReservation}
+          onUpdateInvoiceStatus={onUpdateInvoiceStatus}
+          onNavigateToFinance={onNavigateToFinance}
+          preselectedReservationId={billingPreselectedResId}
+          onClosePreselect={() => setBillingPreselectedResId(null)}
+        />
+      )}
+
+      {activeSubTab === "planner" && (
+        <>
       {/* KPI METRICS OVERVIEW */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -923,6 +1020,23 @@ export default function BookingModule({
 
                     {/* Action buttons */}
                     <div className="pt-2 flex flex-col gap-2">
+                      {/* FRONT DESK BILLING & PAYMENT ACTION BUTTON */}
+                      <button
+                        onClick={() => {
+                          setBillingPreselectedResId(selectedReservation.id);
+                          setActiveSubTab("billing");
+                          setSelectedReservation(null);
+                        }}
+                        className="w-full py-2.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white font-extrabold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer text-xs shadow-xs"
+                      >
+                        <Receipt className="w-4 h-4 text-emerald-300" />
+                        <span>
+                          {selectedReservation.paymentStatus === "Paid"
+                            ? "💳 Lihat Billing & Kuitansi Kasir"
+                            : "💳 Proses Billing & Pembayaran di Kasir"}
+                        </span>
+                      </button>
+
                       <div className="flex items-center gap-2">
                         {selectedReservation.status === "Confirmed" && (
                           <button
@@ -1138,8 +1252,11 @@ export default function BookingModule({
           </form>
         </div>
       )}
+      </>
+      )}
 
       {/* SPREADSHEET DETAIL RESERVASI BERJALAN */}
+      {(activeSubTab === "planner" || activeSubTab === "logs") && (
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
@@ -1240,6 +1357,22 @@ export default function BookingModule({
                     <td className="p-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
                         <button
+                          onClick={() => {
+                            setBillingPreselectedResId(res.id);
+                            setActiveSubTab("billing");
+                          }}
+                          className={`px-2.5 py-1 font-bold rounded-lg text-[10px] transition cursor-pointer flex items-center gap-1 ${
+                            res.paymentStatus === "Paid"
+                              ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                              : "bg-amber-500 hover:bg-amber-600 text-white shadow-2xs"
+                          }`}
+                          title="Buka Kasir & Billing Resepsionis"
+                        >
+                          <Receipt className="w-3 h-3" />
+                          <span>{res.paymentStatus === "Paid" ? "Folio" : "Bayar"}</span>
+                        </button>
+
+                        <button
                           onClick={() => setSelectedReservation(res)}
                           className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-[10px] transition cursor-pointer"
                         >
@@ -1272,6 +1405,7 @@ export default function BookingModule({
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }

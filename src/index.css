@@ -6,3 +6,46 @@
   --font-display: "Space Grotesk", sans-serif;
 }
 
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide all app chrome and background elements when printing official financial document */
+  body.printing-financial-doc * {
+    visibility: hidden;
+  }
+
+  body.printing-financial-doc #printable-financial-document,
+  body.printing-financial-doc #printable-financial-document * {
+    visibility: visible;
+  }
+
+  body.printing-financial-doc #printable-financial-document {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 15px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+
+  .no-print,
+  button,
+  nav,
+  header {
+    display: none !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 12mm 12mm;
+  }
+}
+

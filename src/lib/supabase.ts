@@ -132,8 +132,16 @@ CREATE TABLE IF NOT EXISTS invoices (
   total_amount NUMERIC NOT NULL,
   due_date TEXT NOT NULL,
   status TEXT NOT NULL,
+  whatsapp_status TEXT DEFAULT 'Belum Terkirim',
+  whatsapp_sent_at TIMESTAMP WITH TIME ZONE,
+  whatsapp_phone TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
+
+-- Migrasi jika tabel invoices sebelumnya dibuat tanpa kolom whatsapp:
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS whatsapp_status TEXT DEFAULT 'Belum Terkirim';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS whatsapp_sent_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT;
 
 -- 7. Tabel Expenses
 CREATE TABLE IF NOT EXISTS expenses (
@@ -504,10 +512,109 @@ ON CONFLICT (id) DO UPDATE SET
 `;
 };
 
-// Map local object to DB row names
-const toDbRow = (obj: any) => {
+// SQL migrasi khusus untuk menambahkan kolom whatsapp ke tabel invoices
+export const getInvoicesMigrationSQL = () => {
+  return `-- =======================================================
+-- MIGRATION: ADD WHATSAPP COLUMNS TO INVOICES TABLE
+-- Jalankan skrip ini di SQL Editor dashboard Supabase Anda.
+-- =======================================================
+
+ALTER TABLE public.invoices 
+  ADD COLUMN IF NOT EXISTS whatsapp_status TEXT DEFAULT 'Belum Terkirim',
+  ADD COLUMN IF NOT EXISTS whatsapp_sent_at TIMESTAMP WITH TIME ZONE,
+  ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT;
+
+-- Konfirmasi skema kolom berhasil ditambahkan
+SELECT column_name, data_type, is_nullable 
+FROM information_schema.columns 
+WHERE table_name = 'invoices';
+`;
+};
+
+// Table column schemas to sanitize payloads and prevent PostgREST schema cache errors
+export const TABLE_COLUMNS: Record<string, string[]> = {
+  properties: [
+    "id", "name", "type", "address", "land_area", "building_area",
+    "floors_count", "build_year", "image_url", "documents"
+  ],
+  units: [
+    "id", "property_id", "unit_number", "floor", "type", "size",
+    "price", "status", "facilities", "image_url", "floor_plan_url"
+  ],
+  tenants: [
+    "id", "name", "ktp_number", "ktp_url", "phone", "email", "address",
+    "job_title", "emergency_contact", "created_at", "updated_at"
+  ],
+  reservations: [
+    "id", "tenant_id", "property_id", "unit_id", "check_in_date",
+    "check_out_date", "deposit", "total_price", "payment_status", "status", "created_at"
+  ],
+  contracts: [
+    "id", "tenant_id", "property_id", "unit_id", "start_date", "end_date",
+    "monthly_rent", "terms_description", "tenant_signature", "owner_signature", "created_at"
+  ],
+  invoices: [
+    "id", "tenant_id", "property_id", "unit_id", "invoice_number", "items",
+    "subtotal", "tax", "total_amount", "due_date", "status", "created_at"
+  ],
+  expenses: [
+    "id", "property_id", "category", "amount", "expense_date", "description", "created_by"
+  ],
+  maintenance_tickets: [
+    "id", "property_id", "unit_id", "reported_by", "description", "image_url",
+    "priority", "technician", "status", "cost", "created_at"
+  ],
+  payment_logs: [
+    "id", "invoice_id", "amount", "payment_date", "method", "transaction_number", "proof_url"
+  ],
+  work_chats: [
+    "id", "sender_name", "sender_role", "channel", "message", "user_id", "created_at", "updated_at"
+  ],
+  role_credentials: [
+    "role", "email", "passport"
+  ]
+};
+
+// In-memory cache of recent invoices to ensure payment_logs can resolve and insert parent invoices first
+export const recentInvoicesMap = new Map<string, Invoice>();
+
+export const cacheRecentInvoice = (inv: Invoice) => {
+  if (inv && inv.id) {
+    recentInvoicesMap.set(inv.id, inv);
+  }
+};
+
+export const cacheRecentInvoices = (invList: Invoice[]) => {
+  if (Array.isArray(invList)) {
+    for (const inv of invList) {
+      if (inv && inv.id) {
+        recentInvoicesMap.set(inv.id, inv);
+      }
+    }
+  }
+};
+
+let hasWhatsAppColumns: boolean | null = null;
+
+export const checkInvoicesWhatsAppColumns = async (): Promise<boolean> => {
+  if (!supabase) return false;
+  if (hasWhatsAppColumns !== null) return hasWhatsAppColumns;
+  try {
+    const { error } = await supabase.from("invoices").select("whatsapp_status").limit(0);
+    hasWhatsAppColumns = !error;
+    return hasWhatsAppColumns;
+  } catch {
+    hasWhatsAppColumns = false;
+    return false;
+  }
+};
+
+// Map local object to DB row names with column filtering
+export const toDbRow = (obj: any, tableName?: string) => {
   const result: any = {};
   for (const key in obj) {
+    // Ignore internal keys like _invoice
+    if (key.startsWith("_")) continue;
     // CamelCase to PascalCase or snake_case conversion for standard Postgres names
     const dbKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
     // Check if value is array/object to stringify for Postgres compatibility if table handles JSONB
@@ -517,11 +624,27 @@ const toDbRow = (obj: any) => {
       result[dbKey] = obj[key];
     }
   }
+
+  // If table is known, sanitize columns according to current database schema
+  if (tableName && TABLE_COLUMNS[tableName]) {
+    const allowed = new Set(TABLE_COLUMNS[tableName]);
+    if (tableName === "invoices" && hasWhatsAppColumns === true) {
+      allowed.add("whatsapp_status");
+      allowed.add("whatsapp_sent_at");
+      allowed.add("whatsapp_phone");
+    }
+    for (const k in result) {
+      if (!allowed.has(k)) {
+        delete result[k];
+      }
+    }
+  }
+
   return result;
 };
 
 // Map DB row back to TypeScript model keys
-const fromDbRow = (row: any) => {
+export const fromDbRow = (row: any) => {
   const result: any = {};
   for (const key in row) {
     const jsKey = key.replace(/([-_][a-z])/g, (group) =>
@@ -537,6 +660,9 @@ export const loadAllFromSupabase = async () => {
   if (!supabase) {
     throw new Error("Supabase is not configured.");
   }
+
+  // Detect WhatsApp columns on invoices table in background
+  await checkInvoicesWhatsAppColumns();
 
   const results = {
     properties: [] as Property[],
@@ -594,21 +720,82 @@ export const loadAllFromSupabase = async () => {
     }
   }
 
+  // Cache invoices in memory for foreign key checks
+  if (results.invoices && results.invoices.length > 0) {
+    cacheRecentInvoices(results.invoices);
+  }
+
   return results;
 };
 
 // Set values on individual tables
-export const upsertToSupabase = async (tableName: string, data: any) => {
-  if (!supabase) return null;
-  const row = toDbRow(data);
+export const upsertToSupabase = async (tableName: string, data: any): Promise<boolean> => {
+  if (!supabase) return false;
+
+  // Cache invoice if this is an invoice record
+  if (tableName === "invoices" && data?.id) {
+    cacheRecentInvoice(data);
+  }
+
+  // Foreign key safeguard for payment_logs -> invoices
+  if (tableName === "payment_logs") {
+    const invoiceId = data.invoiceId || data.invoice_id;
+    if (invoiceId) {
+      try {
+        const { data: invRow } = await supabase
+          .from("invoices")
+          .select("id")
+          .eq("id", invoiceId)
+          .maybeSingle();
+
+        if (!invRow) {
+          // Parent invoice is not yet saved in Supabase
+          const cachedInvoice = recentInvoicesMap.get(invoiceId) || (data as any)._invoice;
+          if (cachedInvoice) {
+            console.info(`[PMS Supabase] Faktur induk ${invoiceId} belum ada di Supabase. Menyimpan faktur terlebih dahulu...`);
+            const invSaved = await upsertToSupabase("invoices", cachedInvoice);
+            if (!invSaved) {
+              console.warn(`[PMS Supabase] Gagal menyimpan faktur induk ${invoiceId}. Menunda penyimpanan payment_logs agar tidak memicu error foreign key.`);
+              return false;
+            }
+          } else {
+            console.warn(
+              `[PMS Supabase] Tidak dapat menyimpan payment_logs: Faktur ID ${invoiceId} belum ada di Supabase dan tidak ada di memori. Melewati penyimpanan untuk mencegah pelanggaran foreign key (payment_logs_invoice_id_fkey).`
+            );
+            return false;
+          }
+        }
+      } catch (fkCheckErr) {
+        console.warn("[PMS Supabase] Pengecekan foreign key invoice_id:", fkCheckErr);
+      }
+    }
+  }
+
+  const row = toDbRow(data, tableName);
   try {
-    const { error } = await supabase.from(tableName).upsert(row);
+    let { error } = await supabase.from(tableName).upsert(row);
+
+    // Auto-recovery if a column is missing in Supabase schema cache
+    if (error && error.message && error.message.includes("in the schema cache")) {
+      const match = error.message.match(/Could not find the '([^']+)' column/);
+      if (match && match[1]) {
+        const missingCol = match[1];
+        console.warn(`[PMS Supabase] Kolom '${missingCol}' tidak ditemukan di tabel '${tableName}'. Menghapus kolom dan mencoba ulang...`);
+        if (tableName === "invoices" && missingCol.startsWith("whatsapp")) {
+          hasWhatsAppColumns = false;
+        }
+        delete row[missingCol];
+        const retry = await supabase.from(tableName).upsert(row);
+        error = retry.error;
+      }
+    }
+
     if (error) {
       console.error(`Error saving to table ${tableName}:`, error.message);
       return false;
     }
     return true;
-  } catch (err) {
+  } catch (err: any) {
     console.error(`Exception upserting to ${tableName}:`, err);
     return false;
   }
@@ -646,6 +833,11 @@ export const pushAllToSupabase = async (payload: {
 }) => {
   if (!supabase) return { success: false, error: "Supabase not initialized." };
 
+  // Cache invoices in memory
+  if (payload.invoices) {
+    cacheRecentInvoices(payload.invoices);
+  }
+
   const tables = [
     { name: "properties", list: payload.properties },
     { name: "units", list: payload.units },
@@ -666,8 +858,31 @@ export const pushAllToSupabase = async (payload: {
   for (const t of tables) {
     if (t.list && t.list.length > 0) {
       try {
-        const rows = t.list.map(toDbRow);
-        const { error } = await supabase.from(t.name).upsert(rows);
+        let rows = t.list.map((item) => toDbRow(item, t.name));
+
+        // For payment_logs, filter to only items whose invoiceId is present in payload.invoices
+        if (t.name === "payment_logs" && payload.invoices && payload.invoices.length > 0) {
+          const validInvoiceIds = new Set(payload.invoices.map((inv) => inv.id));
+          rows = rows.filter((r) => r.invoice_id && validInvoiceIds.has(r.invoice_id));
+        }
+
+        let { error } = await supabase.from(t.name).upsert(rows);
+
+        // Auto-recovery if column missing in schema cache during seeding
+        if (error && error.message && error.message.includes("in the schema cache")) {
+          const match = error.message.match(/Could not find the '([^']+)' column/);
+          if (match && match[1]) {
+            const missingCol = match[1];
+            console.warn(`[PMS Supabase] Seeding: Kolom '${missingCol}' tidak ditemukan di '${t.name}'. Mencoba ulang tanpa kolom...`);
+            if (t.name === "invoices" && missingCol.startsWith("whatsapp")) {
+              hasWhatsAppColumns = false;
+            }
+            rows.forEach((r: any) => delete r[missingCol]);
+            const retry = await supabase.from(t.name).upsert(rows);
+            error = retry.error;
+          }
+        }
+
         if (error) {
           results[t.name] = false;
           overallSuccess = false;

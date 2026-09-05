@@ -32,7 +32,8 @@ import {
   Plus,
   Calendar,
   Bell,
-  BookOpen
+  BookOpen,
+  FileSpreadsheet
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -49,7 +50,8 @@ import {
   INITIAL_EMPLOYEES,
   INITIAL_ATTENDANCE,
   INITIAL_PAYROLL,
-  INITIAL_LEAVE_REQUESTS
+  INITIAL_LEAVE_REQUESTS,
+  INITIAL_PAYMENTS
 } from "./data";
 
 import {
@@ -78,7 +80,10 @@ import {
   deleteFromSupabase,
   pushAllToSupabase,
   subscribeToWorkChats,
-  supabase
+  supabase,
+  cacheRecentInvoice,
+  cacheRecentInvoices,
+  recentInvoicesMap
 } from "./lib/supabase";
 import { Database } from "lucide-react";
 
@@ -98,6 +103,7 @@ import CalendarRapatModule from "./components/CalendarRapatModule";
 import HRISModule from "./components/HRISModule";
 import RoleAccountsModule, { RoleCredential } from "./components/RoleAccountsModule";
 import RulesAndSopModule from "./components/RulesAndSopModule";
+import FinancialReportsModule from "./components/FinancialReportsModule";
 
 export default function App() {
   // Default and saved multi-role credentials config
@@ -208,6 +214,7 @@ export default function App() {
         if (results.tablesStatus["invoices"] && results.invoices.length > 0) setInvoices(results.invoices);
         if (results.tablesStatus["expenses"] && results.expenses.length > 0) setExpenses(results.expenses);
         if (results.tablesStatus["maintenance_tickets"] && results.maintenanceTickets.length > 0) setMaintenance(results.maintenanceTickets);
+        if (results.tablesStatus["payment_logs"] && results.paymentLogs.length > 0) setPayments(results.paymentLogs);
         if (results.tablesStatus["work_chats"] && results.workChats && results.workChats.length > 0) {
           setChatMessages(results.workChats);
         }
@@ -238,7 +245,7 @@ export default function App() {
         invoices,
         expenses,
         maintenanceTickets: maintenance,
-        paymentLogs: [],
+        paymentLogs: payments,
         workChats: chatMessages,
         roleCredentials
       });
@@ -256,6 +263,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    cacheRecentInvoices(INITIAL_INVOICES);
     if (isSupabaseConfigured()) {
       loadDataFromSupabase();
       const channel = subscribeToWorkChats((incomingMsg) => {
@@ -309,6 +317,19 @@ export default function App() {
   const [reservations, setReservations] = useState<Reservation[]>(INITIAL_RESERVATIONS);
   const [contracts, setContracts] = useState<Contract[]>(INITIAL_CONTRACTS);
   const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
+  const [payments, setPayments] = useState<PaymentLog[]>(() => {
+    try {
+      const saved = localStorage.getItem("pms_payments");
+      return saved ? JSON.parse(saved) : INITIAL_PAYMENTS;
+    } catch (e) {
+      return INITIAL_PAYMENTS;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("pms_payments", JSON.stringify(payments));
+  }, [payments]);
+
   const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
   const [maintenance, setMaintenance] = useState<MaintenanceTicket[]>(INITIAL_MAINTENANCE);
   
@@ -540,21 +561,24 @@ export default function App() {
     removeFromCloud("tenants", id);
   };
 
-  const handleAddInvoice = (inv: Invoice) => {
-    setInvoices([inv, ...invoices]);
+  const handleAddInvoice = async (inv: Invoice) => {
+    cacheRecentInvoice(inv);
+    setInvoices((prev) => [inv, ...prev]);
     registerLog(`Menerbitkan tagihan ${inv.invoiceNumber} senilai Rp ${inv.totalAmount.toLocaleString()}`, "Keuangan");
-    saveToCloud("invoices", inv);
+    await saveToCloud("invoices", inv);
   };
 
-  const handleUpdateInvoice = (inv: Invoice) => {
+  const handleUpdateInvoice = async (inv: Invoice) => {
+    cacheRecentInvoice(inv);
     setInvoices(invoices.map(i => i.id === inv.id ? inv : i));
-    saveToCloud("invoices", inv);
+    await saveToCloud("invoices", inv);
   };
 
-  const handleUpdateInvoiceStatus = (id: string, status: any) => {
+  const handleUpdateInvoiceStatus = async (id: string, status: any) => {
     const updatedInvs = invoices.map(i => {
       if (i.id === id) {
         const up = { ...i, status };
+        cacheRecentInvoice(up);
         saveToCloud("invoices", up);
         return up;
       }
@@ -564,9 +588,16 @@ export default function App() {
     registerLog(`Pembayaran tagihan invoice lunas dikonfirmasi`, "Keuangan");
   };
 
-  const handleAddPayment = (pay: PaymentLog) => {
+  const handleAddPayment = async (pay: PaymentLog) => {
+    setPayments((prev) => [pay, ...prev]);
     registerLog(`Penerimaan pembayaran dari transaksi ref: ${pay.transactionNumber}`, "Keuangan");
-    saveToCloud("payment_logs", pay);
+
+    // Ensure parent invoice is in Supabase before saving payment log to satisfy foreign key constraint
+    const parentInv = recentInvoicesMap.get(pay.invoiceId) || invoices.find((i) => i.id === pay.invoiceId);
+    if (parentInv) {
+      await saveToCloud("invoices", parentInv);
+    }
+    await saveToCloud("payment_logs", pay);
   };
 
   const handleAddExpense = (exp: Expense) => {
@@ -631,11 +662,11 @@ export default function App() {
       case "HR":
         return ["dashboard", "hris"].includes(tab);
       case "Manager":
-        return ["dashboard", "properti", "kamar", "booking", "tenant", "maintenance", "cleaning"].includes(tab);
+        return ["dashboard", "properti", "kamar", "booking", "tenant", "keuangan", "financial-reports", "maintenance", "cleaning"].includes(tab);
       case "Receptionist":
-        return ["dashboard", "kamar", "booking", "tenant"].includes(tab);
+        return ["dashboard", "kamar", "booking", "tenant", "keuangan"].includes(tab);
       case "Finance":
-        return ["dashboard", "keuangan", "reports"].includes(tab);
+        return ["dashboard", "keuangan", "financial-reports", "reports"].includes(tab);
       case "Marketing/Sales":
         return ["dashboard", "crm", "kamar"].includes(tab);
       case "Staff Maintenance":
@@ -662,7 +693,8 @@ export default function App() {
     { id: "kamar", label: "Kamar & Unit", icon: Home },
     { id: "booking", label: "Reservasi & Booking", icon: CalendarDays },
     { id: "tenant", label: "Daftar Tenant", icon: Users },
-    { id: "keuangan", label: "Billing & Keuangan", icon: DollarSign },
+    { id: "keuangan", label: "Billing & Tagihan", icon: DollarSign },
+    { id: "financial-reports", label: "Laporan Keuangan", icon: FileSpreadsheet },
     { id: "maintenance", label: "Perbaikan", icon: Wrench },
     { id: "cleaning", label: "Housekeeping", icon: Sparkles },
     { id: "crm", label: "Sales & CRM", icon: Award },
@@ -1282,8 +1314,15 @@ export default function App() {
                     tenants={tenants}
                     units={units}
                     properties={properties}
+                    invoices={invoices}
+                    payments={payments}
                     onAddReservation={handleAddReservation}
                     onUpdateReservation={handleUpdateReservation}
+                    onAddInvoice={handleAddInvoice}
+                    onUpdateInvoice={handleUpdateInvoice}
+                    onAddPayment={handleAddPayment}
+                    onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
+                    onNavigateToFinance={() => setActiveTab("keuangan")}
                   />
                 )}
 
@@ -1299,7 +1338,7 @@ export default function App() {
                 {activeTab === "keuangan" && isTabAvailable("keuangan") && (
                   <FinanceModule
                     invoices={invoices}
-                    payments={[]}
+                    payments={payments}
                     expenses={expenses}
                     tenants={tenants}
                     properties={properties}
@@ -1316,6 +1355,29 @@ export default function App() {
                     onUpdatePayroll={handleUpdatePayroll}
                     prefilledUnitId={prefilledUnitId}
                     onClearPrefill={() => setPrefilledUnitId(null)}
+                  />
+                )}
+
+                {activeTab === "financial-reports" && isTabAvailable("financial-reports") && (
+                  <FinancialReportsModule
+                    invoices={invoices}
+                    payments={payments}
+                    expenses={expenses}
+                    payrollList={payroll}
+                    tenants={tenants}
+                    properties={properties}
+                    units={units}
+                    currentUser={{
+                      name: activeRole === "Owner" ? "Sahrul Viona" : userEmail.split("@")[0],
+                      role: activeRole,
+                      email: userEmail
+                    }}
+                    onRecordPayment={(inv) => {
+                      handleUpdateInvoiceStatus(inv.id, "Paid");
+                    }}
+                    onSendReminder={(inv) => {
+                      registerLog(`Kirim pengingat jatuh tempo invoice: ${inv.invoiceNumber}`, "Keuangan");
+                    }}
                   />
                 )}
 
